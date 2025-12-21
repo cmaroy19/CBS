@@ -63,7 +63,7 @@ export class TransactionBuilders {
           type_portefeuille: 'cash' as TypePortefeuille,
           devise,
           sens: 'debit' as const,
-          montant: montant + commission,
+          montant,
           description: 'Entrée Cash',
         },
         {
@@ -74,14 +74,6 @@ export class TransactionBuilders {
           sens: 'credit' as const,
           montant,
           description: `Crédit ${type_portefeuille} ${type_portefeuille === 'virtuel' ? 'service' : 'client'}`,
-        },
-        {
-          ligne_numero: 3,
-          type_portefeuille: 'cash' as TypePortefeuille,
-          devise,
-          sens: 'credit' as const,
-          montant: commission,
-          description: 'Commission dépôt',
         },
       ],
     };
@@ -113,16 +105,8 @@ export class TransactionBuilders {
           type_portefeuille: 'cash' as TypePortefeuille,
           devise,
           sens: 'credit' as const,
-          montant: montant - commission,
+          montant,
           description: 'Sortie Cash',
-        },
-        {
-          ligne_numero: 3,
-          type_portefeuille: 'cash' as TypePortefeuille,
-          devise,
-          sens: 'debit' as const,
-          montant: commission,
-          description: 'Commission retrait',
         },
       ],
     };
