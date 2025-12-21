@@ -72,21 +72,46 @@ Lorsque le caissier choisit "Paiement mixte":
 
 ### Structure des Lignes (Transaction Mixte)
 
-#### Retrait Mixte (exemple: 13 USD dont 10 USD cash + 3 USD en CDF)
+Les transactions mixtes utilisent 5 lignes pour équilibrer correctement chaque devise.
 
+#### Retrait Mixte (exemple: 17 USD dont 10 USD cash + 7 USD en CDF = 17500 CDF)
+
+**Lignes en USD** (équilibrées: débit 17 = crédit 10 + 7):
 ```
-Ligne 1: Débit Service Virtuel - 13 USD
+Ligne 1: Débit Service Virtuel - 17 USD
 Ligne 2: Crédit Cash USD - 10 USD
-Ligne 3: Crédit Cash CDF - 7500 CDF (équiv. 3 USD)
+Ligne 3: Crédit Change (sortant) - 7 USD
 ```
 
-#### Dépôt Mixte (exemple: 13 USD dont 10 USD cash + 3 USD en CDF)
+**Lignes en CDF** (équilibrées: débit 17500 = crédit 17500):
+```
+Ligne 4: Débit Change (entrant) - 17500 CDF
+Ligne 5: Crédit Cash CDF - 17500 CDF
+```
 
+#### Dépôt Mixte (exemple: 17 USD dont 10 USD cash + 7 USD en CDF = 17500 CDF)
+
+**Lignes en USD** (équilibrées: débit 10 + 7 = crédit 17):
 ```
 Ligne 1: Débit Cash USD - 10 USD
-Ligne 2: Débit Cash CDF - 7500 CDF (équiv. 3 USD)
-Ligne 3: Crédit Service Virtuel - 13 USD
+Ligne 2: Débit Change (entrant) - 7 USD
+Ligne 3: Crédit Service Virtuel - 17 USD
 ```
+
+**Lignes en CDF** (équilibrées: débit 17500 = crédit 17500):
+```
+Ligne 4: Débit Cash CDF - 17500 CDF
+Ligne 5: Crédit Change (sortant) - 17500 CDF
+```
+
+### Type de Portefeuille "Change"
+
+Les lignes avec `type_portefeuille = 'change'` sont des écritures comptables intermédiaires qui permettent:
+1. D'équilibrer chaque devise séparément (débits = crédits)
+2. De représenter la conversion entre devises
+3. De maintenir la traçabilité de l'opération de change
+
+**Important**: Les lignes de type "change" ne mettent pas à jour directement les soldes. Elles servent uniquement à l'équilibrage comptable des transactions multi-devises.
 
 ## Triggers Automatiques
 
@@ -96,7 +121,8 @@ S'exécute automatiquement lorsqu'une transaction multi-lignes est validée.
 
 **Fonctionnement**:
 1. Parcourt toutes les lignes de la transaction
-2. Met à jour les soldes selon le type de portefeuille:
+2. **Ignore les lignes de type "change"** (utilisées uniquement pour l'équilibrage)
+3. Met à jour les soldes selon le type de portefeuille:
    - **Cash**: Met à jour `global_balances`
    - **Virtuel**: Met à jour le service concerné
 
@@ -105,6 +131,18 @@ S'exécute automatiquement lorsqu'une transaction multi-lignes est validée.
 - **Crédit cash** = Diminution du cash (sortie d'argent)
 - **Débit virtuel** = Diminution du solde virtuel
 - **Crédit virtuel** = Augmentation du solde virtuel
+
+**Exemple avec retrait mixte de 17 USD (10 USD + 7 USD en CDF)**:
+- Ligne 1 (Débit virtuel 17 USD): Solde virtuel service -17 USD
+- Ligne 2 (Crédit cash 10 USD): Cash USD -10 USD
+- Ligne 3 (Crédit change 7 USD): **Ignorée** (pas de mise à jour)
+- Ligne 4 (Débit change 17500 CDF): **Ignorée** (pas de mise à jour)
+- Ligne 5 (Crédit cash 17500 CDF): Cash CDF -17500 CDF
+
+**Résultat final**:
+- Solde virtuel service: -17 USD
+- Cash USD: -10 USD
+- Cash CDF: -17500 CDF
 
 ## Avantages du Système
 
@@ -121,14 +159,16 @@ Le système utilise le taux de change actif configuré dans la table `exchange_r
 - Utilisé pour tous les calculs automatiques
 - Figé dans la transaction pour traçabilité
 
-## Migration Base de Données
+## Migrations Base de Données
 
-**Migration**: `20251221_add_multi_line_transaction_triggers.sql`
+**Migration 1**: `20251221_add_multi_line_transaction_triggers.sql`
+- Création de la fonction `update_balances_on_validation()`
+- Création du trigger sur `transaction_headers`
+- Gestion automatique des soldes
 
-Cette migration crée:
-- La fonction `update_balances_on_validation()`
-- Le trigger sur `transaction_headers`
-- La gestion automatique des soldes
+**Migration 2**: `20251221_update_trigger_handle_change_portfolio.sql`
+- Mise à jour de la fonction pour ignorer les lignes de type "change"
+- Gestion correcte des transactions multi-devises équilibrées
 
 ## Notes Importantes
 

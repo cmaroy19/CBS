@@ -170,12 +170,11 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
     const deviseSecondaire = formData.devise === 'USD' ? 'CDF' : 'USD';
     const montantRestant = formData.montant - montantPrincipal;
 
-    // Créer une transaction multi-lignes
     const lines = [];
 
     if (formData.type === 'depot') {
       // DÉPÔT MIXTE
-      // Ligne 1 : Débit cash principal
+      // Lignes en devise principale
       lines.push({
         ligne_numero: 1,
         type_portefeuille: 'cash' as const,
@@ -185,17 +184,15 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         description: `Dépôt ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
 
-      // Ligne 2 : Débit cash secondaire
       lines.push({
         ligne_numero: 2,
-        type_portefeuille: 'cash' as const,
-        devise: deviseSecondaire,
+        type_portefeuille: 'change' as const,
+        devise: formData.devise,
         sens: 'debit' as const,
-        montant: montantSecondaire,
-        description: `Dépôt ${montantSecondaire.toFixed(2)} ${deviseSecondaire} (équiv. ${montantRestant.toFixed(2)} ${formData.devise})`,
+        montant: montantRestant,
+        description: `Change entrant ${montantRestant.toFixed(2)} ${formData.devise}`,
       });
 
-      // Ligne 3 : Crédit service virtuel
       lines.push({
         ligne_numero: 3,
         type_portefeuille: 'virtuel' as const,
@@ -205,9 +202,28 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         montant: formData.montant,
         description: `Crédit service ${service.nom}`,
       });
+
+      // Lignes en devise secondaire (équilibrage du change)
+      lines.push({
+        ligne_numero: 4,
+        type_portefeuille: 'cash' as const,
+        devise: deviseSecondaire,
+        sens: 'debit' as const,
+        montant: montantSecondaire,
+        description: `Dépôt ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
+      });
+
+      lines.push({
+        ligne_numero: 5,
+        type_portefeuille: 'change' as const,
+        devise: deviseSecondaire,
+        sens: 'credit' as const,
+        montant: montantSecondaire,
+        description: `Change sortant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
+      });
     } else {
       // RETRAIT MIXTE
-      // Ligne 1 : Débit service virtuel
+      // Lignes en devise principale
       lines.push({
         ligne_numero: 1,
         type_portefeuille: 'virtuel' as const,
@@ -218,7 +234,6 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         description: `Débit service ${service.nom}`,
       });
 
-      // Ligne 2 : Crédit cash principal
       lines.push({
         ligne_numero: 2,
         type_portefeuille: 'cash' as const,
@@ -228,14 +243,32 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         description: `Retrait ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
 
-      // Ligne 3 : Crédit cash secondaire
       lines.push({
         ligne_numero: 3,
+        type_portefeuille: 'change' as const,
+        devise: formData.devise,
+        sens: 'credit' as const,
+        montant: montantRestant,
+        description: `Change sortant ${montantRestant.toFixed(2)} ${formData.devise}`,
+      });
+
+      // Lignes en devise secondaire (équilibrage du change)
+      lines.push({
+        ligne_numero: 4,
+        type_portefeuille: 'change' as const,
+        devise: deviseSecondaire,
+        sens: 'debit' as const,
+        montant: montantSecondaire,
+        description: `Change entrant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
+      });
+
+      lines.push({
+        ligne_numero: 5,
         type_portefeuille: 'cash' as const,
         devise: deviseSecondaire,
         sens: 'credit' as const,
         montant: montantSecondaire,
-        description: `Retrait ${montantSecondaire.toFixed(2)} ${deviseSecondaire} (équiv. ${montantRestant.toFixed(2)} ${formData.devise})`,
+        description: `Retrait ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
     }
 
