@@ -251,6 +251,47 @@ export interface Database {
           created_at?: string
         }
       }
+      exchange_rates: {
+        Row: {
+          id: string
+          devise_source: 'USD' | 'CDF'
+          devise_destination: 'USD' | 'CDF'
+          taux: number
+          actif: boolean
+          date_debut: string
+          date_fin: string | null
+          notes: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          devise_source: 'USD' | 'CDF'
+          devise_destination: 'USD' | 'CDF'
+          taux: number
+          actif?: boolean
+          date_debut?: string
+          date_fin?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          devise_source?: 'USD' | 'CDF'
+          devise_destination?: 'USD' | 'CDF'
+          taux?: number
+          actif?: boolean
+          date_debut?: string
+          date_fin?: string | null
+          notes?: string | null
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       realtime_balances: {
@@ -259,6 +300,19 @@ export interface Database {
           cash_cdf: number | null
           total_virtuel_usd: number | null
           total_virtuel_cdf: number | null
+        }
+      }
+      v_active_exchange_rates: {
+        Row: {
+          id: string
+          devise_source: 'USD' | 'CDF'
+          devise_destination: 'USD' | 'CDF'
+          taux: number
+          date_debut: string
+          date_fin: string | null
+          notes: string | null
+          created_by: string | null
+          created_at: string
         }
       }
     }
