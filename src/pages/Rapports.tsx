@@ -88,15 +88,55 @@ export function Rapports() {
     window.print();
   };
 
-  const filterDataByCurrency = (currency: string) => {
+  const calculateCurrencyData = (currency: string) => {
+    const currencyTransactions = transactions.filter(t => t.devise === currency);
+    const currencyApprovisionnements = approvisionnements.filter(a => a.devise === currency);
+
+    const depots = currencyTransactions.filter(t => t.type === 'depot');
+    const retraits = currencyTransactions.filter(t => t.type === 'retrait');
+    const entrees = currencyApprovisionnements.filter(a => a.type === 'entree');
+    const sorties = currencyApprovisionnements.filter(a => a.type === 'sortie');
+
+    const depotsVolume = depots.reduce((sum, t) => sum + t.montant, 0);
+    const depotsCommissions = depots.reduce((sum, t) => sum + t.commission, 0);
+    const retraitsVolume = retraits.reduce((sum, t) => sum + t.montant, 0);
+    const retraitsCommissions = retraits.reduce((sum, t) => sum + t.commission, 0);
+    const entreesVolume = entrees.reduce((sum, a) => sum + a.montant, 0);
+    const sortiesVolume = sorties.reduce((sum, a) => sum + a.montant, 0);
+
     return {
-      transactions: transactions.filter(t => t.devise === currency),
-      approvisionnements: approvisionnements.filter(a => a.devise === currency),
+      transactions: {
+        depots: {
+          count: depots.length,
+          volume: depotsVolume,
+          commissions: depotsCommissions,
+        },
+        retraits: {
+          count: retraits.length,
+          volume: retraitsVolume,
+          commissions: retraitsCommissions,
+        },
+      },
+      approvisionnements: {
+        entrees: {
+          count: entrees.length,
+          volume: entreesVolume,
+        },
+        sorties: {
+          count: sorties.length,
+          volume: sortiesVolume,
+        },
+      },
+      total: {
+        operations: currencyTransactions.length + currencyApprovisionnements.length,
+        volume: depotsVolume + retraitsVolume + entreesVolume + sortiesVolume,
+        commissions: depotsCommissions + retraitsCommissions,
+      },
     };
   };
 
-  const usdData = filterDataByCurrency('USD');
-  const cdfData = filterDataByCurrency('CDF');
+  const usdData = calculateCurrencyData('USD');
+  const cdfData = calculateCurrencyData('CDF');
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
@@ -148,18 +188,12 @@ export function Rapports() {
             <>
               <CurrencyReportSection
                 currency="USD"
-                symbol="$"
-                transactions={usdData.transactions}
-                approvisionnements={usdData.approvisionnements}
-                changeOperations={changeOperations}
+                data={usdData}
               />
 
               <CurrencyReportSection
                 currency="CDF"
-                symbol="FC"
-                transactions={cdfData.transactions}
-                approvisionnements={cdfData.approvisionnements}
-                changeOperations={changeOperations}
+                data={cdfData}
               />
             </>
           )}
