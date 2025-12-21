@@ -292,6 +292,97 @@ export interface Database {
           updated_at?: string
         }
       }
+      transaction_headers: {
+        Row: {
+          id: string
+          reference: string
+          type_operation: 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert'
+          devise_reference: 'USD' | 'CDF'
+          montant_total: number
+          description: string | null
+          info_client: string | null
+          taux_change: number | null
+          paire_devises: string | null
+          statut: 'brouillon' | 'validee' | 'annulee'
+          created_by: string | null
+          validated_by: string | null
+          validated_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          reference: string
+          type_operation: 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert'
+          devise_reference: 'USD' | 'CDF'
+          montant_total: number
+          description?: string | null
+          info_client?: string | null
+          taux_change?: number | null
+          paire_devises?: string | null
+          statut?: 'brouillon' | 'validee' | 'annulee'
+          created_by?: string | null
+          validated_by?: string | null
+          validated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          reference?: string
+          type_operation?: 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert'
+          devise_reference?: 'USD' | 'CDF'
+          montant_total?: number
+          description?: string | null
+          info_client?: string | null
+          taux_change?: number | null
+          paire_devises?: string | null
+          statut?: 'brouillon' | 'validee' | 'annulee'
+          created_by?: string | null
+          validated_by?: string | null
+          validated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      transaction_lines: {
+        Row: {
+          id: string
+          header_id: string
+          ligne_numero: number
+          type_portefeuille: 'cash' | 'virtuel'
+          service_id: string | null
+          devise: 'USD' | 'CDF'
+          sens: 'debit' | 'credit'
+          montant: number
+          description: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          header_id: string
+          ligne_numero: number
+          type_portefeuille: 'cash' | 'virtuel'
+          service_id?: string | null
+          devise: 'USD' | 'CDF'
+          sens: 'debit' | 'credit'
+          montant: number
+          description?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          header_id?: string
+          ligne_numero?: number
+          type_portefeuille?: 'cash' | 'virtuel'
+          service_id?: string | null
+          devise?: 'USD' | 'CDF'
+          sens?: 'debit' | 'credit'
+          montant?: number
+          description?: string | null
+          created_at?: string
+        }
+      }
     }
     Views: {
       realtime_balances: {
@@ -313,6 +404,26 @@ export interface Database {
           notes: string | null
           created_by: string | null
           created_at: string
+        }
+      }
+      v_transactions_completes: {
+        Row: {
+          id: string
+          reference: string
+          type_operation: 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert'
+          devise_reference: 'USD' | 'CDF'
+          montant_total: number
+          description: string | null
+          info_client: string | null
+          taux_change: number | null
+          paire_devises: string | null
+          statut: 'brouillon' | 'validee' | 'annulee'
+          created_by: string | null
+          validated_by: string | null
+          validated_at: string | null
+          created_at: string
+          updated_at: string
+          lines: Json | null
         }
       }
     }

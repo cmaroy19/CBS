@@ -16,6 +16,8 @@ interface CreateTransactionHeaderParams {
   montant_total: number;
   description?: string;
   info_client?: string;
+  taux_change?: number;
+  paire_devises?: string;
 }
 
 interface CreateTransactionLineParams {

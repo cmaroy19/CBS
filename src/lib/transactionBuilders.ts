@@ -183,6 +183,8 @@ export class TransactionBuilders {
         devise_reference: devise_source,
         montant_total: montant_source,
         description: `Change ${devise_source} vers ${devise_destination} (taux: ${taux})`,
+        taux_change: taux,
+        paire_devises: `${devise_source}/${devise_destination}`,
       },
       lines: [
         {

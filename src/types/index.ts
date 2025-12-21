@@ -131,3 +131,17 @@ export interface TransactionComplete {
   header: TransactionHeader;
   lines: TransactionLine[];
 }
+
+export interface ExchangeRate {
+  id: string;
+  devise_source: Devise;
+  devise_destination: Devise;
+  taux: number;
+  actif: boolean;
+  date_debut: string;
+  date_fin: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
