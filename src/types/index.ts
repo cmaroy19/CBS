@@ -5,7 +5,7 @@ export type ApproType = 'cash' | 'virtuel';
 export type ApproOperation = 'entree' | 'sortie';
 export type ChangeSens = 'usd_to_cdf' | 'cdf_to_usd';
 export type TypeOperation = 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert';
-export type TypePortefeuille = 'cash' | 'virtuel';
+export type TypePortefeuille = 'cash' | 'virtuel' | 'change';
 export type SensEcriture = 'debit' | 'credit';
 export type StatutTransaction = 'brouillon' | 'validee' | 'annulee';
 
