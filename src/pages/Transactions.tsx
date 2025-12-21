@@ -41,8 +41,6 @@ export function Transactions() {
           .from('transaction_headers')
           .select(`
             *,
-            creator:users!transaction_headers_created_by_fkey(*),
-            validator:users!transaction_headers_validated_by_fkey(*),
             lines:transaction_lines(
               *,
               service:services(*)

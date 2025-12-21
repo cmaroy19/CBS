@@ -126,7 +126,7 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
                 })}
               </td>
               <td className="px-6 py-4 text-sm text-slate-600">
-                {transaction.creator?.nom_complet || 'N/A'}
+                -
               </td>
             </tr>
           ))

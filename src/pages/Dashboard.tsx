@@ -67,24 +67,31 @@ export function Dashboard() {
       setLoading(false);
 
       supabase
-        .from('transactions')
+        .from('transaction_headers')
         .select(`
           id,
           reference,
-          type_transaction,
-          montant,
-          devise,
+          type_operation,
+          montant_total,
+          devise_reference,
           info_client,
           created_at,
-          service:service_id(nom)
+          lines:transaction_lines(service:services(nom))
         `)
+        .eq('statut', 'validee')
         .order('created_at', { ascending: false })
         .limit(10)
         .then((res) => {
           if (res.data) {
             const formatted = res.data.map((t: any) => ({
-              ...t,
-              service_nom: t.service?.nom || null,
+              id: t.id,
+              reference: t.reference,
+              type_transaction: t.type_operation,
+              montant: t.montant_total,
+              devise: t.devise_reference,
+              info_client: t.info_client,
+              created_at: t.created_at,
+              service_nom: t.lines?.[0]?.service?.nom || null,
             }));
             setRecentTransactions(formatted);
           }
