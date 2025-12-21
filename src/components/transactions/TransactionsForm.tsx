@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuthStore } from '../../stores/authStore';
+import { MultiLineTransactionService } from '../../lib/multiLineTransactions';
+import { MixedPaymentModal } from './MixedPaymentModal';
 import type { Service } from '../../types';
 
 interface TransactionsFormProps {
@@ -22,10 +24,58 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [tauxChange, setTauxChange] = useState(0);
+
+  // Récupérer le taux de change actif
+  useEffect(() => {
+    const fetchExchangeRate = async () => {
+      const { data } = await supabase
+        .from('exchange_rates')
+        .select('*')
+        .eq('actif', true)
+        .eq('devise_source', 'USD')
+        .eq('devise_destination', 'CDF')
+        .maybeSingle();
+
+      if (data) {
+        setTauxChange(data.taux);
+      }
+    };
+
+    fetchExchangeRate();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validation des données
+    if (!formData.service_id) {
+      setError('Veuillez sélectionner un service');
+      return;
+    }
+
+    if (formData.montant <= 0) {
+      setError('Le montant doit être supérieur à zéro');
+      return;
+    }
+
+    if (!tauxChange) {
+      setError('Taux de change non disponible. Veuillez configurer les taux de change.');
+      return;
+    }
+
+    // Afficher la modale de confirmation
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmTransaction = async (
+    useMixed: boolean,
+    montantPrincipal?: number,
+    montantSecondaire?: number
+  ) => {
+    setShowConfirmModal(false);
     setLoading(true);
 
     try {
@@ -34,72 +84,179 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         throw new Error('Service non trouvé');
       }
 
-      if (formData.montant <= 0) {
-        throw new Error('Le montant doit être supérieur à zéro');
-      }
-
-      const soldeKey = formData.devise === 'USD' ? 'solde_virtuel_usd' : 'solde_virtuel_cdf';
-
-      if (formData.type === 'depot') {
-        if (service[soldeKey] < formData.montant) {
-          throw new Error(
-            `Solde virtuel insuffisant. Solde disponible: ${service[soldeKey].toFixed(2)} ${formData.devise}`
-          );
-        }
+      if (!useMixed) {
+        // Transaction simple (une seule devise)
+        await createSimpleTransaction(service);
       } else {
-        const { data: globalBalance } = await supabase
-          .from('global_balances')
-          .select('*')
-          .maybeSingle();
-
-        if (!globalBalance) {
-          throw new Error('Balance globale non trouvée');
+        // Transaction mixte (multi-devise)
+        if (!montantPrincipal || !montantSecondaire) {
+          throw new Error('Montants invalides pour le paiement mixte');
         }
-
-        const cashKey = formData.devise === 'USD' ? 'cash_usd' : 'cash_cdf';
-        if (globalBalance[cashKey] < formData.montant) {
-          throw new Error(
-            `Solde cash insuffisant. Solde disponible: ${globalBalance[cashKey].toFixed(2)} ${formData.devise}`
-          );
-        }
+        await createMixedTransaction(service, montantPrincipal, montantSecondaire);
       }
-
-      const { data: transaction, error: insertError } = await supabase
-        .from('transactions')
-        .insert({
-          type: formData.type,
-          service_id: formData.service_id,
-          montant: formData.montant,
-          devise: formData.devise,
-          commission: formData.commission,
-          info_client: formData.info_client || null,
-          notes: formData.notes || null,
-          created_by: user?.id,
-        })
-        .select()
-        .single();
-
-      if (insertError) throw insertError;
-
-      await supabase.from('audit_logs').insert({
-        table_name: 'transactions',
-        operation: 'INSERT',
-        record_id: transaction.id,
-        new_data: {
-          type: formData.type,
-          service: service.nom,
-          montant: formData.montant,
-          devise: formData.devise,
-          reference: transaction.reference,
-        },
-        user_id: user?.id,
-      });
 
       onSuccess();
     } catch (err: any) {
       setError(err.message || 'Erreur lors de la création de la transaction');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const createSimpleTransaction = async (service: Service) => {
+    const soldeKey = formData.devise === 'USD' ? 'solde_virtuel_usd' : 'solde_virtuel_cdf';
+
+    if (formData.type === 'depot') {
+      if (service[soldeKey] < formData.montant) {
+        throw new Error(
+          `Solde virtuel insuffisant. Solde disponible: ${service[soldeKey].toFixed(2)} ${formData.devise}`
+        );
+      }
+    } else {
+      const { data: globalBalance } = await supabase
+        .from('global_balances')
+        .select('*')
+        .maybeSingle();
+
+      if (!globalBalance) {
+        throw new Error('Balance globale non trouvée');
+      }
+
+      const cashKey = formData.devise === 'USD' ? 'cash_usd' : 'cash_cdf';
+      if (globalBalance[cashKey] < formData.montant) {
+        throw new Error(
+          `Solde cash insuffisant. Solde disponible: ${globalBalance[cashKey].toFixed(2)} ${formData.devise}`
+        );
+      }
+    }
+
+    const { data: transaction, error: insertError } = await supabase
+      .from('transactions')
+      .insert({
+        type: formData.type,
+        service_id: formData.service_id,
+        montant: formData.montant,
+        devise: formData.devise,
+        commission: formData.commission,
+        info_client: formData.info_client || null,
+        notes: formData.notes || null,
+        created_by: user?.id,
+      })
+      .select()
+      .single();
+
+    if (insertError) throw insertError;
+
+    await supabase.from('audit_logs').insert({
+      table_name: 'transactions',
+      operation: 'INSERT',
+      record_id: transaction.id,
+      new_data: {
+        type: formData.type,
+        service: service.nom,
+        montant: formData.montant,
+        devise: formData.devise,
+        reference: transaction.reference,
+      },
+      user_id: user?.id,
+    });
+  };
+
+  const createMixedTransaction = async (
+    service: Service,
+    montantPrincipal: number,
+    montantSecondaire: number
+  ) => {
+    const deviseSecondaire = formData.devise === 'USD' ? 'CDF' : 'USD';
+    const montantRestant = formData.montant - montantPrincipal;
+
+    // Créer une transaction multi-lignes
+    const lines = [];
+
+    if (formData.type === 'depot') {
+      // DÉPÔT MIXTE
+      // Ligne 1 : Débit cash principal
+      lines.push({
+        ligne_numero: 1,
+        type_portefeuille: 'cash' as const,
+        devise: formData.devise,
+        sens: 'debit' as const,
+        montant: montantPrincipal,
+        description: `Dépôt ${montantPrincipal.toFixed(2)} ${formData.devise}`,
+      });
+
+      // Ligne 2 : Débit cash secondaire
+      lines.push({
+        ligne_numero: 2,
+        type_portefeuille: 'cash' as const,
+        devise: deviseSecondaire,
+        sens: 'debit' as const,
+        montant: montantSecondaire,
+        description: `Dépôt ${montantSecondaire.toFixed(2)} ${deviseSecondaire} (équiv. ${montantRestant.toFixed(2)} ${formData.devise})`,
+      });
+
+      // Ligne 3 : Crédit service virtuel
+      lines.push({
+        ligne_numero: 3,
+        type_portefeuille: 'virtuel' as const,
+        service_id: service.id,
+        devise: formData.devise,
+        sens: 'credit' as const,
+        montant: formData.montant,
+        description: `Crédit service ${service.nom}`,
+      });
+    } else {
+      // RETRAIT MIXTE
+      // Ligne 1 : Débit service virtuel
+      lines.push({
+        ligne_numero: 1,
+        type_portefeuille: 'virtuel' as const,
+        service_id: service.id,
+        devise: formData.devise,
+        sens: 'debit' as const,
+        montant: formData.montant,
+        description: `Débit service ${service.nom}`,
+      });
+
+      // Ligne 2 : Crédit cash principal
+      lines.push({
+        ligne_numero: 2,
+        type_portefeuille: 'cash' as const,
+        devise: formData.devise,
+        sens: 'credit' as const,
+        montant: montantPrincipal,
+        description: `Retrait ${montantPrincipal.toFixed(2)} ${formData.devise}`,
+      });
+
+      // Ligne 3 : Crédit cash secondaire
+      lines.push({
+        ligne_numero: 3,
+        type_portefeuille: 'cash' as const,
+        devise: deviseSecondaire,
+        sens: 'credit' as const,
+        montant: montantSecondaire,
+        description: `Retrait ${montantSecondaire.toFixed(2)} ${deviseSecondaire} (équiv. ${montantRestant.toFixed(2)} ${formData.devise})`,
+      });
+    }
+
+    const { data, error } = await MultiLineTransactionService.createTransaction(
+      {
+        type_operation: formData.type,
+        devise_reference: formData.devise,
+        montant_total: formData.montant,
+        description: `${formData.type === 'depot' ? 'Dépôt' : 'Retrait'} mixte - ${service.nom}`,
+        info_client: formData.info_client || undefined,
+        taux_change: tauxChange,
+        paire_devises: 'USD/CDF',
+      },
+      lines
+    );
+
+    if (error) throw error;
+
+    // Valider immédiatement la transaction
+    if (data?.header.id) {
+      await MultiLineTransactionService.validateTransaction(data.header.id);
     }
   };
 
@@ -246,6 +403,18 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
           {loading ? 'Enregistrement...' : 'Créer la transaction'}
         </button>
       </div>
+
+      {/* Modale de confirmation avec option paiement mixte */}
+      {showConfirmModal && (
+        <MixedPaymentModal
+          montantTotal={formData.montant}
+          devise={formData.devise}
+          type={formData.type}
+          tauxChange={tauxChange}
+          onConfirm={handleConfirmTransaction}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      )}
     </form>
   );
 }
