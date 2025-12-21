@@ -174,12 +174,15 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
 
     if (formData.type === 'depot') {
       // DÉPÔT MIXTE
+      // Le client DÉPOSE de l'argent sur son compte virtuel
+      // L'agent REÇOIT le cash du client et ENVOIE le virtuel au client
+
       // Lignes en devise principale
       lines.push({
         ligne_numero: 1,
         type_portefeuille: 'cash' as const,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantPrincipal,
         description: `Dépôt ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
@@ -188,7 +191,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 2,
         type_portefeuille: 'change' as const,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantRestant,
         description: `Change entrant ${montantRestant.toFixed(2)} ${formData.devise}`,
       });
@@ -198,9 +201,9 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         type_portefeuille: 'virtuel' as const,
         service_id: service.id,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: formData.montant,
-        description: `Crédit service ${service.nom}`,
+        description: `Débit service ${service.nom}`,
       });
 
       // Lignes en devise secondaire (équilibrage du change)
@@ -208,7 +211,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 4,
         type_portefeuille: 'cash' as const,
         devise: deviseSecondaire,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantSecondaire,
         description: `Dépôt ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
@@ -217,28 +220,31 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 5,
         type_portefeuille: 'change' as const,
         devise: deviseSecondaire,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantSecondaire,
         description: `Change sortant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
     } else {
       // RETRAIT MIXTE
+      // Le client RETIRE de l'argent de son compte virtuel
+      // L'agent REÇOIT le virtuel du client et DONNE le cash au client
+
       // Lignes en devise principale
       lines.push({
         ligne_numero: 1,
         type_portefeuille: 'virtuel' as const,
         service_id: service.id,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: formData.montant,
-        description: `Débit service ${service.nom}`,
+        description: `Crédit service ${service.nom}`,
       });
 
       lines.push({
         ligne_numero: 2,
         type_portefeuille: 'cash' as const,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantPrincipal,
         description: `Retrait ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
@@ -247,7 +253,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 3,
         type_portefeuille: 'change' as const,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantRestant,
         description: `Change sortant ${montantRestant.toFixed(2)} ${formData.devise}`,
       });
@@ -257,7 +263,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 4,
         type_portefeuille: 'change' as const,
         devise: deviseSecondaire,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantSecondaire,
         description: `Change entrant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
@@ -266,7 +272,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 5,
         type_portefeuille: 'cash' as const,
         devise: deviseSecondaire,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantSecondaire,
         description: `Retrait ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
