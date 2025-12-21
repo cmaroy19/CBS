@@ -105,24 +105,24 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
 
   const createSimpleTransaction = async (service: Service) => {
     const soldeKey = formData.devise === 'USD' ? 'solde_virtuel_usd' : 'solde_virtuel_cdf';
+    const cashKey = formData.devise === 'USD' ? 'cash_usd' : 'cash_cdf';
+
+    const { data: globalBalance } = await supabase
+      .from('global_balances')
+      .select('*')
+      .maybeSingle();
+
+    if (!globalBalance) {
+      throw new Error('Balance globale non trouvée');
+    }
 
     if (formData.type === 'depot') {
       if (service[soldeKey] < formData.montant) {
         throw new Error(
-          `Solde virtuel insuffisant. Solde disponible: ${service[soldeKey].toFixed(2)} ${formData.devise}`
+          `Solde virtuel insuffisant pour le service. Solde disponible: ${service[soldeKey].toFixed(2)} ${formData.devise}`
         );
       }
     } else {
-      const { data: globalBalance } = await supabase
-        .from('global_balances')
-        .select('*')
-        .maybeSingle();
-
-      if (!globalBalance) {
-        throw new Error('Balance globale non trouvée');
-      }
-
-      const cashKey = formData.devise === 'USD' ? 'cash_usd' : 'cash_cdf';
       if (globalBalance[cashKey] < formData.montant) {
         throw new Error(
           `Solde cash insuffisant. Solde disponible: ${globalBalance[cashKey].toFixed(2)} ${formData.devise}`
@@ -182,7 +182,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 1,
         type_portefeuille: 'cash' as const,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantPrincipal,
         description: `Dépôt ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
@@ -191,7 +191,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 2,
         type_portefeuille: 'change' as const,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantRestant,
         description: `Change entrant ${montantRestant.toFixed(2)} ${formData.devise}`,
       });
@@ -201,9 +201,9 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         type_portefeuille: 'virtuel' as const,
         service_id: service.id,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: formData.montant,
-        description: `Débit service ${service.nom}`,
+        description: `Crédit service ${service.nom}`,
       });
 
       // Lignes en devise secondaire (équilibrage du change)
@@ -211,7 +211,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 4,
         type_portefeuille: 'cash' as const,
         devise: deviseSecondaire,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantSecondaire,
         description: `Dépôt ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
@@ -220,7 +220,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 5,
         type_portefeuille: 'change' as const,
         devise: deviseSecondaire,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantSecondaire,
         description: `Change sortant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
@@ -235,16 +235,16 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         type_portefeuille: 'virtuel' as const,
         service_id: service.id,
         devise: formData.devise,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: formData.montant,
-        description: `Crédit service ${service.nom}`,
+        description: `Débit service ${service.nom}`,
       });
 
       lines.push({
         ligne_numero: 2,
         type_portefeuille: 'cash' as const,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantPrincipal,
         description: `Retrait ${montantPrincipal.toFixed(2)} ${formData.devise}`,
       });
@@ -253,7 +253,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 3,
         type_portefeuille: 'change' as const,
         devise: formData.devise,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantRestant,
         description: `Change sortant ${montantRestant.toFixed(2)} ${formData.devise}`,
       });
@@ -263,7 +263,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 4,
         type_portefeuille: 'change' as const,
         devise: deviseSecondaire,
-        sens: 'credit' as const,
+        sens: 'debit' as const,
         montant: montantSecondaire,
         description: `Change entrant ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
@@ -272,7 +272,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         ligne_numero: 5,
         type_portefeuille: 'cash' as const,
         devise: deviseSecondaire,
-        sens: 'debit' as const,
+        sens: 'credit' as const,
         montant: montantSecondaire,
         description: `Retrait ${montantSecondaire.toFixed(2)} ${deviseSecondaire}`,
       });
