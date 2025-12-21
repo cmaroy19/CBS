@@ -1,9 +1,11 @@
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useDataStore } from '../stores/dataStore';
+import { useServiceBalances } from '../hooks/useServiceBalances';
 import { CurrencySection } from '../components/dashboard/CurrencySection';
 import { RecentTransactions } from '../components/dashboard/RecentTransactions';
 import { AlertsPanel } from '../components/dashboard/AlertsPanel';
+import ServiceBalances from '../components/dashboard/ServiceBalances';
 import { Activity, TrendingUp, Users } from 'lucide-react';
 
 interface DashboardStats {
@@ -35,8 +37,20 @@ interface RecentTransaction {
   created_at: string;
 }
 
+interface ServiceBalance {
+  id: string;
+  service_name: string;
+  service_code: string;
+  type_compte: 'cash' | 'virtuel';
+  virtual_usd: number;
+  virtual_cdf: number;
+  is_active: boolean;
+  last_updated: string;
+}
+
 export function Dashboard() {
   const services = useDataStore(state => state.services);
+  const serviceBalances = useServiceBalances();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -245,6 +259,10 @@ export function Dashboard() {
           totalGeneral={totalCDF}
         />
       </div>
+
+      {serviceBalances.length > 0 && (
+        <ServiceBalances services={serviceBalances} />
+      )}
 
       <AlertsPanel
         cashUsd={stats.cash_usd}

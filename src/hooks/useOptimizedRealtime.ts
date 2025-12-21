@@ -63,17 +63,56 @@ export function useOptimizedRealtime() {
           {
             event: 'INSERT',
             schema: 'public',
-            table: 'transactions',
+            table: 'transaction_headers',
           },
           async () => {
-            const { data } = await supabase
-              .from('transactions')
-              .select('*, service:services(*), creator:users(*)')
-              .order('created_at', { ascending: false })
-              .limit(100);
+            const [txRes, servicesRes] = await Promise.all([
+              supabase
+                .from('transaction_headers')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(100),
+              supabase
+                .from('services')
+                .select('*')
+                .order('created_at', { ascending: false })
+            ]);
 
-            if (data) {
-              setTransactions(data as any);
+            if (txRes.data) {
+              setTransactions(txRes.data as any);
+            }
+
+            if (servicesRes.data) {
+              setServices(servicesRes.data);
+            }
+          }
+        )
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'transaction_headers',
+          },
+          async () => {
+            const [txRes, servicesRes] = await Promise.all([
+              supabase
+                .from('transaction_headers')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(100),
+              supabase
+                .from('services')
+                .select('*')
+                .order('created_at', { ascending: false })
+            ]);
+
+            if (txRes.data) {
+              setTransactions(txRes.data as any);
+            }
+
+            if (servicesRes.data) {
+              setServices(servicesRes.data);
             }
           }
         )
