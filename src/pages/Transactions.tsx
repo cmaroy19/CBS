@@ -5,14 +5,14 @@ import { Modal } from '../components/ui/Modal';
 import { Plus, Calendar } from 'lucide-react';
 import { TransactionsForm } from '../components/transactions/TransactionsForm';
 import { TransactionsTable } from '../components/transactions/TransactionsTable';
-import type { TransactionHeader } from '../types';
+import type { Transaction } from '../types';
 
 const ITEMS_PER_PAGE = 20;
 
 export function Transactions() {
   const services = useDataStore(state => state.services);
   const setServices = useDataStore(state => state.setServices);
-  const [transactions, setTransactions] = useState<TransactionHeader[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -38,20 +38,14 @@ export function Transactions() {
 
       const [transactionsRes, countRes, servicesRes] = await Promise.all([
         supabase
-          .from('transaction_headers')
-          .select(`
-            *,
-            lines:transaction_lines(
-              *,
-              service:services(*)
-            )
-          `)
+          .from('transactions')
+          .select('*, service:services(*), creator:users(*)')
           .gte('created_at', startOfDay)
           .lte('created_at', endOfDay)
           .order('created_at', { ascending: false })
           .range(from, to),
         supabase
-          .from('transaction_headers')
+          .from('transactions')
           .select('*', { count: 'exact', head: true })
           .gte('created_at', startOfDay)
           .lte('created_at', endOfDay),

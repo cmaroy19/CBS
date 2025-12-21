@@ -4,10 +4,6 @@ export type TransactionType = 'depot' | 'retrait';
 export type ApproType = 'cash' | 'virtuel';
 export type ApproOperation = 'entree' | 'sortie';
 export type ChangeSens = 'usd_to_cdf' | 'cdf_to_usd';
-export type TypeOperation = 'depot' | 'retrait' | 'approvisionnement' | 'change' | 'transfert';
-export type TypePortefeuille = 'cash' | 'virtuel' | 'change';
-export type SensEcriture = 'debit' | 'credit';
-export type StatutTransaction = 'brouillon' | 'validee' | 'annulee';
 
 export interface User {
   id: string;
@@ -91,57 +87,4 @@ export interface RealtimeBalance {
   cash_cdf: number | null;
   total_virtuel_usd: number | null;
   total_virtuel_cdf: number | null;
-}
-
-export interface TransactionHeader {
-  id: string;
-  reference: string;
-  type_operation: TypeOperation;
-  devise_reference: Devise;
-  montant_total: number;
-  description: string | null;
-  info_client: string | null;
-  statut: StatutTransaction;
-  created_by: string | null;
-  validated_by: string | null;
-  validated_at: string | null;
-  created_at: string;
-  updated_at: string;
-  creator?: User;
-  validator?: User;
-  lines?: TransactionLine[];
-}
-
-export interface TransactionLine {
-  id: string;
-  header_id: string;
-  ligne_numero: number;
-  type_portefeuille: TypePortefeuille;
-  service_id: string | null;
-  devise: Devise;
-  sens: SensEcriture;
-  montant: number;
-  description: string | null;
-  created_at: string;
-  service?: Service;
-  header?: TransactionHeader;
-}
-
-export interface TransactionComplete {
-  header: TransactionHeader;
-  lines: TransactionLine[];
-}
-
-export interface ExchangeRate {
-  id: string;
-  devise_source: Devise;
-  devise_destination: Devise;
-  taux: number;
-  actif: boolean;
-  date_debut: string;
-  date_fin: string | null;
-  notes: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
 }
