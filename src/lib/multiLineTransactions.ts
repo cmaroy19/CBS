@@ -57,7 +57,6 @@ export class MultiLineTransactionService {
         .from('transaction_headers')
         .insert({
           ...headerParams,
-          reference: '',
           statut: 'brouillon',
           created_by: user.user.id,
         })
