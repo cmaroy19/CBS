@@ -481,6 +481,153 @@ function exempleValidationManuelle() {
 }
 ```
 
+## Exemple 11: Retrait mixte USD/CDF
+
+```typescript
+import { getActiveExchangeRate } from '@/lib/exchangeRates';
+
+async function exempleRetraitMixte() {
+  const montantDemande = 100;
+  const commission = 2;
+  const serviceId = 'service-uuid';
+
+  // 1. Vérifier les soldes disponibles
+  const { data: balances } = await supabase
+    .from('realtime_balances')
+    .select('cash_usd, cash_cdf')
+    .single();
+
+  const cashUsdDisponible = balances?.cash_usd || 0;
+  const cashCdfDisponible = balances?.cash_cdf || 0;
+
+  console.log('Soldes disponibles:', {
+    usd: cashUsdDisponible,
+    cdf: cashCdfDisponible,
+  });
+
+  // 2. Récupérer le taux de change actif
+  const taux = await getActiveExchangeRate('USD', 'CDF');
+
+  if (!taux) {
+    console.error('❌ Aucun taux de change actif trouvé');
+    return;
+  }
+
+  console.log('Taux actif:', taux.taux);
+
+  // 3. Calculer le montant CDF nécessaire si USD insuffisant
+  const montantRestantUSD = Math.max(0, montantDemande - cashUsdDisponible);
+  const montantCdfNecessaire = montantRestantUSD * taux.taux;
+
+  if (montantRestantUSD > 0) {
+    console.log('USD insuffisant, conversion nécessaire:');
+    console.log(`- ${montantRestantUSD} USD → ${montantCdfNecessaire} CDF`);
+
+    if (cashCdfDisponible < montantCdfNecessaire) {
+      console.error('❌ Cash CDF insuffisant pour cette opération');
+      return;
+    }
+  }
+
+  // 4. Construire la transaction
+  const transaction = transactionBuilders.buildRetraitMixte({
+    montant_total_usd: montantDemande,
+    cash_usd_disponible: Math.min(cashUsdDisponible, montantDemande),
+    taux_usd_cdf: taux.taux,
+    commission,
+    service_id: serviceId,
+    info_client: 'Client: Paul Durand',
+  });
+
+  console.log('Transaction construite:', transaction.header.description);
+
+  // 5. Créer la transaction
+  const { data, error } = await multiLineTransactionService.createTransaction(
+    transaction.header,
+    transaction.lines
+  );
+
+  if (error) {
+    console.error('❌ Erreur création:', error);
+    return;
+  }
+
+  console.log('✓ Transaction créée:', data.header.reference);
+
+  // Afficher les détails des lignes
+  console.log('\nDétails des lignes:');
+  data.lines.forEach((line, index) => {
+    console.log(`Ligne ${index + 1}:`, {
+      type: line.type_portefeuille,
+      devise: line.devise,
+      sens: line.sens,
+      montant: line.montant,
+      description: line.description,
+    });
+  });
+
+  // 6. Valider la transaction
+  const { success, error: validateError } = await multiLineTransactionService.validateTransaction(
+    data.header.id
+  );
+
+  if (validateError) {
+    console.error('❌ Erreur validation:', validateError);
+    return;
+  }
+
+  console.log('\n✓ Transaction validée avec succès');
+  console.log(`Client reçoit: ${Math.min(cashUsdDisponible, montantDemande)} USD`);
+  if (montantRestantUSD > 0) {
+    console.log(`          + ${montantCdfNecessaire.toFixed(0)} CDF`);
+  }
+}
+
+// Exemple avec différents scénarios
+async function exemplesScenariosRetraitMixte() {
+  const serviceId = 'service-uuid';
+  const taux = 2700;
+
+  // Scénario 1: Assez d'USD
+  console.log('\n=== Scénario 1: Cash USD suffisant ===');
+  const tx1 = transactionBuilders.buildRetraitMixte({
+    montant_total_usd: 50,
+    cash_usd_disponible: 100,
+    taux_usd_cdf: taux,
+    commission: 2,
+    service_id: serviceId,
+  });
+  console.log('Description:', tx1.header.description);
+  console.log('Lignes:', tx1.lines.length);
+
+  // Scénario 2: USD insuffisant, utilisation de CDF
+  console.log('\n=== Scénario 2: Cash USD insuffisant ===');
+  const tx2 = transactionBuilders.buildRetraitMixte({
+    montant_total_usd: 100,
+    cash_usd_disponible: 30,
+    taux_usd_cdf: taux,
+    commission: 2,
+    service_id: serviceId,
+  });
+  console.log('Description:', tx2.header.description);
+  console.log('Client reçoit: 30 USD + 189,000 CDF');
+  console.log('Lignes:', tx2.lines.length);
+
+  // Scénario 3: Aucun USD, tout en CDF
+  console.log('\n=== Scénario 3: Aucun USD disponible ===');
+  const tx3 = transactionBuilders.buildRetraitMixte({
+    montant_total_usd: 100,
+    cash_usd_disponible: 0,
+    taux_usd_cdf: taux,
+    commission: 2,
+    service_id: serviceId,
+  });
+  console.log('Description:', tx3.header.description);
+  console.log('Client reçoit: 0 USD + 270,000 CDF');
+  console.log('Lignes:', tx3.lines.length);
+}
+```
+
 ## Notes d'utilisation
 
 ### Gestion des erreurs

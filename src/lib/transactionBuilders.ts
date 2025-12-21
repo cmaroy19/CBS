@@ -36,6 +36,15 @@ export interface ChangeParams {
   taux: number;
 }
 
+export interface RetraitMixteParams {
+  montant_total_usd: number;
+  cash_usd_disponible: number;
+  taux_usd_cdf: number;
+  commission: number;
+  service_id: string;
+  info_client?: string;
+}
+
 export class TransactionBuilders {
   static buildDepot(params: DepotTransactionParams) {
     const { montant, devise, commission, service_id, type_portefeuille, info_client } = params;
@@ -249,6 +258,130 @@ export class TransactionBuilders {
           sens: 'credit' as const,
           montant,
           description: 'Crédit service destination',
+        },
+      ],
+    };
+  }
+
+  static buildRetraitMixte(params: RetraitMixteParams) {
+    const {
+      montant_total_usd,
+      cash_usd_disponible,
+      taux_usd_cdf,
+      commission,
+      service_id,
+      info_client,
+    } = params;
+
+    const montant_usd_restant = montant_total_usd - cash_usd_disponible;
+    const montant_cdf_equivalent = montant_usd_restant * taux_usd_cdf;
+
+    if (montant_usd_restant <= 0) {
+      return {
+        header: {
+          type_operation: 'retrait' as const,
+          devise_reference: 'USD' as Devise,
+          montant_total: montant_total_usd,
+          description: `Retrait USD complet`,
+          info_client,
+        },
+        lines: [
+          {
+            ligne_numero: 1,
+            type_portefeuille: 'virtuel' as TypePortefeuille,
+            service_id,
+            devise: 'USD' as Devise,
+            sens: 'credit' as const,
+            montant: montant_total_usd,
+            description: 'Crédit virtuel USD',
+          },
+          {
+            ligne_numero: 2,
+            type_portefeuille: 'cash' as TypePortefeuille,
+            devise: 'USD' as Devise,
+            sens: 'credit' as const,
+            montant: montant_total_usd,
+            description: 'Sortie Cash USD',
+          },
+          {
+            ligne_numero: 3,
+            type_portefeuille: 'cash' as TypePortefeuille,
+            devise: 'USD' as Devise,
+            sens: 'debit' as const,
+            montant: montant_total_usd,
+            description: 'Contrepartie équilibrage',
+          },
+          {
+            ligne_numero: 4,
+            type_portefeuille: 'cash' as TypePortefeuille,
+            devise: 'USD' as Devise,
+            sens: 'credit' as const,
+            montant: commission,
+            description: 'Commission retrait',
+          },
+        ],
+      };
+    }
+
+    return {
+      header: {
+        type_operation: 'retrait' as const,
+        devise_reference: 'USD' as Devise,
+        montant_total: montant_total_usd,
+        description: `Retrait mixte USD/CDF (${cash_usd_disponible.toFixed(2)} USD + ${montant_cdf_equivalent.toFixed(0)} CDF au taux ${taux_usd_cdf})`,
+        info_client,
+        taux_change: taux_usd_cdf,
+        paire_devises: 'USD/CDF',
+      },
+      lines: [
+        {
+          ligne_numero: 1,
+          type_portefeuille: 'virtuel' as TypePortefeuille,
+          service_id,
+          devise: 'USD' as Devise,
+          sens: 'credit' as const,
+          montant: montant_total_usd,
+          description: 'Crédit virtuel USD (retrait client)',
+        },
+        {
+          ligne_numero: 2,
+          type_portefeuille: 'cash' as TypePortefeuille,
+          devise: 'USD' as Devise,
+          sens: 'credit' as const,
+          montant: cash_usd_disponible,
+          description: `Sortie Cash USD (${cash_usd_disponible.toFixed(2)} USD disponibles)`,
+        },
+        {
+          ligne_numero: 3,
+          type_portefeuille: 'cash' as TypePortefeuille,
+          devise: 'CDF' as Devise,
+          sens: 'credit' as const,
+          montant: montant_cdf_equivalent,
+          description: `Sortie Cash CDF (équiv. ${montant_usd_restant.toFixed(2)} USD au taux ${taux_usd_cdf})`,
+        },
+        {
+          ligne_numero: 4,
+          type_portefeuille: 'cash' as TypePortefeuille,
+          devise: 'USD' as Devise,
+          sens: 'debit' as const,
+          montant: montant_total_usd + commission,
+          description: 'Contrepartie équilibrage USD',
+        },
+        {
+          ligne_numero: 5,
+          type_portefeuille: 'cash' as TypePortefeuille,
+          devise: 'CDF' as Devise,
+          sens: 'debit' as const,
+          montant: montant_cdf_equivalent,
+          description: 'Contrepartie équilibrage CDF',
+        },
+        {
+          ligne_numero: 6,
+          type_portefeuille: 'cash' as TypePortefeuille,
+          devise: 'USD' as Devise,
+          sens: 'credit' as const,
+          montant: commission,
+          description: 'Commission retrait',
         },
       ],
     };
