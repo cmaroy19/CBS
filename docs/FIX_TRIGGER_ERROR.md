@@ -2,198 +2,236 @@
 
 ## Problème Rencontré
 
-Lors de la validation de transactions multi-lignes, l'erreur suivante apparaissait:
+Lors de toute opération sur la table `transaction_headers` (création ou validation), l'erreur suivante apparaissait:
 
 ```
 ERROR: 0A000: trigger functions can only be called as triggers
+CONTEXT: compilation of PL/pgSQL function "generate_transaction_reference" near line 1
+PL/pgSQL function set_transaction_reference() line 4 at assignment
 ```
 
-Cette erreur se produisait quand on tentait de valider une transaction (changer le statut de 'brouillon' à 'validee').
+Cette erreur se produisait même lors de la simple création d'une transaction, pas seulement lors de la validation.
 
-## Cause Réelle du Problème
+## Cause RÉELLE du Problème
 
-### 1. Problème Principal: Policy RLS Restrictive
+Le problème n'était PAS avec `update_balances_on_validation` comme on pouvait le croire initialement.
 
-La policy UPDATE sur `transaction_headers` était trop restrictive:
+### Le Vrai Coupable: `generate_transaction_reference()`
 
-```sql
--- Policy existante (problématique)
-"Créateur peut modifier header non validé"
-  USING (created_by = auth.uid() AND statut = 'brouillon')
-  WITH CHECK (created_by = auth.uid() AND statut = 'brouillon')
-```
-
-Le `WITH CHECK` exigeait que le statut reste 'brouillon' APRÈS l'update, empêchant ainsi tout changement vers 'validee'.
-
-### 2. Problème Secondaire: Définition de Fonction et Trigger
-
-Le trigger avait été créé et recréé dans plusieurs migrations successives, créant potentiellement des problèmes de cache ou de définition:
-   - `20251221114536_20251221_add_multi_line_transaction_triggers.sql` - création initiale
-   - `20251221115018_20251221_update_trigger_handle_change_portfolio.sql` - mise à jour de la fonction
-   - `20251221115423_fix_trigger_function_definition.sql` - tentative de correction
-
-## Solution Appliquée
-
-### Solution 1: Reconstruction Complète du Trigger (Migration: `fix_complete_rebuild_trigger_function`)
-
-1. **Suppression complète** de l'ancien trigger et de la fonction
-2. **Recréation propre** de la fonction avec une logique claire:
+La fonction `generate_transaction_reference()` était définie comme une fonction TRIGGER (avec `RETURNS trigger`), mais elle était appelée DIRECTEMENT comme une fonction normale dans `set_transaction_reference()`:
 
 ```sql
-CREATE FUNCTION update_balances_on_validation()
-RETURNS TRIGGER
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  v_line RECORD;
-  v_global_balance_id uuid;
+-- Code problématique dans set_transaction_reference()
+CREATE FUNCTION set_transaction_reference()
+RETURNS TRIGGER AS $$
 BEGIN
-  -- Ne traiter que le changement vers 'validee'
-  IF NEW.statut = 'validee' AND (OLD.statut IS DISTINCT FROM 'validee') THEN
-    -- Traitement des lignes de transaction
-    -- Mise à jour des soldes cash et virtuels
-    ...
+  IF NEW.reference IS NULL OR NEW.reference = '' THEN
+    -- ERREUR: appel direct d'une fonction trigger!
+    NEW.reference := generate_transaction_reference();
   END IF;
   RETURN NEW;
 END;
 $$;
 ```
 
-3. **Recréation du trigger**:
+**Règle PostgreSQL**: Une fonction définie avec `RETURNS trigger` ne peut être invoquée QUE par un trigger système, jamais directement dans du code PL/pgSQL.
+
+### Problème Additionnel
+
+Il existait aussi un ancien trigger sur une table obsolète `transactions` qui utilisait la même fonction, créant une dépendance qui empêchait la modification directe de la fonction.
+
+## Solution Appliquée
+
+### Migration 1: Nettoyage (`fix_generate_reference_remove_old_trigger`)
+
+1. **Suppression de l'ancien trigger** sur la table `transactions`
+2. **Suppression de l'ancienne fonction** avec CASCADE pour supprimer toutes les dépendances
 
 ```sql
-CREATE TRIGGER trigger_update_balances_on_validation
-  BEFORE UPDATE ON transaction_headers
-  FOR EACH ROW
-  WHEN (NEW.statut = 'validee' AND (OLD.statut IS DISTINCT FROM 'validee'))
-  EXECUTE FUNCTION update_balances_on_validation();
+DROP TRIGGER IF EXISTS trigger_generate_transaction_reference ON transactions;
+DROP FUNCTION IF EXISTS generate_transaction_reference() CASCADE;
 ```
 
-**Améliorations**:
-- Utilisation de `IS DISTINCT FROM` pour une meilleure gestion des NULL
-- Simplification de la logique pour éviter les mises à jour inutiles du timestamp `updated_at`
-- Code plus clair et maintenable
+### Migration 2: Recréation Correcte (`fix_generate_reference_create_text_function`)
 
-### Solution 2: Ajout d'une Policy RLS pour la Validation (Migration: `fix_rls_policy_allow_validation`)
-
-**Le problème principal** était que la policy RLS empêchait le changement de statut:
+1. **Recréation de la fonction pour retourner TEXT**:
 
 ```sql
--- Policy ajoutée
-CREATE POLICY "Créateur peut valider sa transaction"
-  ON transaction_headers
-  FOR UPDATE
-  TO authenticated
-  USING (created_by = auth.uid() AND statut = 'brouillon')
-  WITH CHECK (created_by = auth.uid() AND statut = 'validee');
+CREATE FUNCTION generate_transaction_reference()
+RETURNS TEXT  -- <-- TEXT au lieu de TRIGGER!
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_date_part text;
+  v_count int;
+  v_reference text;
+  v_today date;
+BEGIN
+  v_today := CURRENT_DATE;
+  v_date_part := to_char(v_today, 'DD-MM-YYYY');
+
+  -- Compte sur transaction_headers au lieu de transactions
+  SELECT COUNT(*) + 1 INTO v_count
+  FROM transaction_headers
+  WHERE DATE(created_at) = v_today;
+
+  v_reference := v_date_part || '-' || lpad(v_count::text, 4, '0');
+
+  RETURN v_reference;
+END;
+$$;
 ```
 
-Cette nouvelle policy:
-- Permet au créateur de valider sa propre transaction
-- Vérifie que la transaction est en statut 'brouillon' (USING)
-- Permet le changement vers 'validee' (WITH CHECK)
-- Fonctionne en parallèle avec la policy existante (mode PERMISSIVE)
+2. **Mise à jour de set_transaction_reference()** (pas de changement de code, juste reconstruction):
 
-## Migrations Appliquées
+```sql
+CREATE OR REPLACE FUNCTION set_transaction_reference()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.reference IS NULL OR NEW.reference = '' THEN
+    -- Maintenant OK: appel d'une fonction qui retourne TEXT
+    NEW.reference := generate_transaction_reference();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+```
 
-### Migration 1: `fix_complete_rebuild_trigger_function.sql`
-Reconstruction complète de la fonction trigger et du trigger
+## Changements Clés
 
-### Migration 2: `fix_rls_policy_allow_validation.sql`
-Ajout de la policy RLS pour permettre la validation des transactions
+1. **Type de retour changé**: `RETURNS trigger` → `RETURNS TEXT`
+2. **Table mise à jour**: `transactions` → `transaction_headers`
+3. **Nettoyage**: Suppression de l'ancien trigger sur la table obsolète
 
 ## Vérification de la Correction
 
-Après l'application des migrations:
-
-1. **Requêtes SELECT fonctionnent**: Les requêtes de lecture sur `transaction_headers` s'exécutent sans erreur
-2. **Build réussi**: Le projet se compile correctement
-3. **Trigger actif**: Le trigger est correctement attaché et configuré
-4. **Policies RLS**: Deux policies UPDATE fonctionnent en mode PERMISSIVE (OR):
-   - "Créateur peut modifier header non validé" - pour les modifications en brouillon
-   - "Créateur peut valider sa transaction" - pour la validation
-
-## Tests de Validation
-
-### Test 1: Vérifier les Policies RLS
+### Test 1: Création de Transaction
 
 ```sql
-SELECT policyname, qual, with_check
-FROM pg_policies
-WHERE schemaname = 'public'
-AND tablename = 'transaction_headers'
-AND cmd = 'UPDATE';
+INSERT INTO transaction_headers (
+  type_operation, devise_reference, montant_total, statut, created_by
+) VALUES (
+  'depot', 'USD', 100, 'brouillon', '<user_id>'
+);
 ```
 
 Résultat attendu:
-- 2 policies UPDATE présentes
-- Une avec `with_check` contenant `statut = 'brouillon'`
-- Une avec `with_check` contenant `statut = 'validee'`
+- Transaction créée avec succès
+- Référence générée automatiquement au format `DD-MM-YYYY-####`
+- Aucune erreur
 
-### Test 2: Vérifier le Trigger
+### Test 2: Validation de Transaction
 
 ```sql
-SELECT trigger_name, event_manipulation, action_timing
-FROM information_schema.triggers
-WHERE trigger_name = 'trigger_update_balances_on_validation';
+-- Créer les lignes
+INSERT INTO transaction_lines (header_id, ligne_numero, type_portefeuille, devise, sens, montant)
+VALUES
+  ('<header_id>', 1, 'cash', 'USD', 'debit', 100),
+  ('<header_id>', 2, 'virtuel', 'USD', 'credit', 100);
+
+-- Valider
+UPDATE transaction_headers
+SET statut = 'validee'
+WHERE id = '<header_id>';
 ```
 
 Résultat attendu:
-- Trigger présent
-- Action timing: BEFORE
-- Event: UPDATE
+- Transaction validée avec succès
+- Soldes mis à jour automatiquement
+- Aucune erreur
 
-### Test 3: Créer et Valider une Transaction
+### Test 3: Vérification du Build
 
-1. **Créer une transaction multi-lignes**:
-   - Utiliser le frontend pour créer une transaction de test
-   - Type: paiement, retrait, ou paiement mixte
-   - Vérifier que le statut initial est 'brouillon'
+```bash
+npm run build
+```
 
-2. **Valider la transaction**:
-   - Cliquer sur le bouton de validation
-   - La transaction devrait passer au statut 'validee'
-   - Les soldes (cash et/ou virtuels) devraient être mis à jour automatiquement
-
-3. **Vérifier les soldes**:
-   - Consulter le dashboard
-   - Les soldes affichés doivent correspondre aux changements effectués
+Résultat attendu:
+- Build réussi sans erreurs
+- Tous les modules transformés correctement
 
 ## Bonnes Pratiques Apprises
 
-1. **Vérifier les policies RLS en premier**: Avant de déboguer un trigger, vérifier que les policies RLS permettent l'opération UPDATE souhaitée
-   - Les policies `WITH CHECK` valident l'état APRÈS l'update
-   - Utiliser des policies séparées pour différents types de changements de statut
+### 1. Comprendre les Types de Fonctions PostgreSQL
 
-2. **Utiliser `IS DISTINCT FROM`**: Plus robuste que `IS NULL OR !=` pour comparer des valeurs pouvant être NULL
-   - `IS DISTINCT FROM` traite NULL comme une valeur distincte
-   - Évite les pièges avec les comparaisons NULL
+**Fonctions TRIGGER (`RETURNS trigger`)**:
+- Ne peuvent être appelées que par un trigger
+- Reçoivent automatiquement les variables `NEW`, `OLD`, `TG_OP`, etc.
+- Doivent retourner `NEW`, `OLD`, ou `NULL`
 
-3. **Reconstruire proprement en cas de problème**:
-   - DROP puis CREATE au lieu de multiples ALTER
-   - Évite les problèmes de cache et de synchronisation
-   - Donne une définition propre et claire
+**Fonctions Normales (`RETURNS <type>`)**:
+- Peuvent être appelées directement dans du code SQL/PL/pgSQL
+- Doivent retourner le type spécifié
+- Plus flexibles pour la réutilisation
 
-4. **Policies PERMISSIVE fonctionnent en OR**:
-   - Plusieurs policies PERMISSIVE peuvent coexister
-   - L'opération réussit si AU MOINS UNE policy permet l'action
-   - Utile pour gérer différents scénarios d'UPDATE
+### 2. Quand Utiliser Chaque Type
 
-5. **Documenter les transitions de statut**:
-   - Clairement identifier quelles policies permettent quels changements de statut
-   - Aide au débogage et à la maintenance
+**Utiliser une fonction TRIGGER quand**:
+- La fonction doit être exécutée automatiquement lors d'événements (INSERT, UPDATE, DELETE)
+- La fonction a besoin d'accéder aux variables de contexte du trigger (`OLD`, `NEW`)
+- La fonction contrôle l'exécution de l'opération (peut annuler l'opération)
+
+**Utiliser une fonction normale quand**:
+- La fonction doit être appelée explicitement depuis du code
+- La fonction est une utilité réutilisable (calculs, formatage, validation)
+- La fonction peut être appelée dans des SELECTs, des expressions, etc.
+
+### 3. Diagnostiquer l'Erreur "trigger functions can only be called as triggers"
+
+Quand cette erreur apparaît, chercher:
+1. Les fonctions définies avec `RETURNS trigger`
+2. Les appels directs à ces fonctions dans du code PL/pgSQL
+3. Les assignations de variable utilisant ces fonctions
+
+**Exemple d'erreur**:
+```sql
+v_result := my_trigger_function();  -- ❌ ERREUR!
+```
+
+**Solution**:
+```sql
+-- Option 1: Changer le type de retour
+CREATE FUNCTION my_function() RETURNS TEXT ...
+
+-- Option 2: Séparer en deux fonctions
+CREATE FUNCTION my_helper() RETURNS TEXT ...  -- Fonction helper
+CREATE FUNCTION my_trigger() RETURNS TRIGGER ...  -- Fonction trigger
+```
+
+### 4. Migration de Code Existant
+
+Quand on modifie une fonction existante:
+1. Vérifier les dépendances avec `\df+ function_name` ou les requêtes système
+2. Supprimer les dépendances d'abord (triggers, vues, autres fonctions)
+3. Utiliser `CASCADE` si nécessaire pour forcer la suppression
+4. Recréer la fonction avec la nouvelle signature
+5. Recréer les dépendances
+
+## Migrations Appliquées
+
+1. **`fix_generate_reference_remove_old_trigger.sql`**
+   - Nettoyage de l'ancien trigger et fonction
+
+2. **`fix_generate_reference_create_text_function.sql`**
+   - Recréation avec le bon type de retour (TEXT)
 
 ## Conclusion
 
-Le problème principal était une **policy RLS trop restrictive** qui empêchait le changement de statut de 'brouillon' à 'validee'. La solution a impliqué:
+L'erreur "trigger functions can only be called as triggers" était causée par:
+- Une fonction `generate_transaction_reference()` mal typée (TRIGGER au lieu de TEXT)
+- Un appel direct à cette fonction dans `set_transaction_reference()`
 
-1. **Reconstruction du trigger** pour éliminer tout problème de définition
-2. **Ajout d'une policy RLS** pour permettre la validation des transactions
+La solution:
+- Supprimer l'ancienne fonction et ses dépendances
+- Recréer la fonction avec `RETURNS TEXT`
+- Mettre à jour les références à la table correcte (`transaction_headers`)
 
-Le système de transactions multi-lignes est maintenant pleinement fonctionnel:
-- Création de transactions avec plusieurs lignes
-- Équilibrage automatique multi-devises avec lignes de type "change"
-- Validation avec mise à jour automatique des soldes (cash et virtuels)
-- Gestion sécurisée via RLS avec policies appropriées pour chaque opération
+Le système fonctionne maintenant correctement:
+- Génération automatique de références pour les nouvelles transactions
+- Validation de transactions multi-lignes
+- Mise à jour automatique des soldes
+- Aucune erreur lors des opérations
