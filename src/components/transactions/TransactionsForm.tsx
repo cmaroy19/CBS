@@ -104,59 +104,76 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
   };
 
   const createSimpleTransaction = async (service: Service) => {
-    const soldeKey = formData.devise === 'USD' ? 'solde_virtuel_usd' : 'solde_virtuel_cdf';
-    const cashKey = formData.devise === 'USD' ? 'cash_usd' : 'cash_cdf';
-
-    const { data: globalBalance } = await supabase
-      .from('global_balances')
-      .select('*')
-      .maybeSingle();
-
-    if (!globalBalance) {
-      throw new Error('Balance globale non trouvée');
-    }
+    const lines = [];
 
     if (formData.type === 'depot') {
-      if (service[soldeKey] < formData.montant) {
-        throw new Error(
-          `Solde virtuel insuffisant pour le service. Solde disponible: ${service[soldeKey].toFixed(2)} ${formData.devise}`
-        );
-      }
+      lines.push({
+        ligne_numero: 1,
+        type_portefeuille: 'cash' as const,
+        devise: formData.devise,
+        sens: 'debit' as const,
+        montant: formData.montant,
+        description: `Dépôt ${formData.montant.toFixed(2)} ${formData.devise}`,
+      });
+
+      lines.push({
+        ligne_numero: 2,
+        type_portefeuille: 'virtuel' as const,
+        service_id: service.id,
+        devise: formData.devise,
+        sens: 'credit' as const,
+        montant: formData.montant,
+        description: `Crédit service ${service.nom}`,
+      });
     } else {
-      if (globalBalance[cashKey] < formData.montant) {
-        throw new Error(
-          `Solde cash insuffisant. Solde disponible: ${globalBalance[cashKey].toFixed(2)} ${formData.devise}`
-        );
-      }
+      lines.push({
+        ligne_numero: 1,
+        type_portefeuille: 'virtuel' as const,
+        service_id: service.id,
+        devise: formData.devise,
+        sens: 'debit' as const,
+        montant: formData.montant,
+        description: `Débit service ${service.nom}`,
+      });
+
+      lines.push({
+        ligne_numero: 2,
+        type_portefeuille: 'cash' as const,
+        devise: formData.devise,
+        sens: 'credit' as const,
+        montant: formData.montant,
+        description: `Retrait ${formData.montant.toFixed(2)} ${formData.devise}`,
+      });
     }
 
-    const { data: transaction, error: insertError } = await supabase
-      .from('transactions')
-      .insert({
-        type: formData.type,
-        service_id: formData.service_id,
-        montant: formData.montant,
-        devise: formData.devise,
-        commission: formData.commission,
-        info_client: formData.info_client || null,
-        notes: formData.notes || null,
-        created_by: user?.id,
-      })
-      .select()
-      .single();
+    const description = formData.notes
+      ? `${formData.type === 'depot' ? 'Dépôt' : 'Retrait'} simple - ${formData.notes}`
+      : `${formData.type === 'depot' ? 'Dépôt' : 'Retrait'} simple`;
 
-    if (insertError) throw insertError;
+    const { data, error } = await MultiLineTransactionService.createTransaction(
+      {
+        type_operation: formData.type,
+        devise_reference: formData.devise,
+        montant_total: formData.montant,
+        description,
+        info_client: formData.info_client || undefined,
+      },
+      lines
+    );
+
+    if (error) throw error;
+    if (!data) throw new Error('Erreur lors de la création de la transaction');
 
     await supabase.from('audit_logs').insert({
-      table_name: 'transactions',
+      table_name: 'transaction_headers',
       operation: 'INSERT',
-      record_id: transaction.id,
+      record_id: data.header.id,
       new_data: {
         type: formData.type,
         service: service.nom,
         montant: formData.montant,
         devise: formData.devise,
-        reference: transaction.reference,
+        reference: data.header.reference,
       },
       user_id: user?.id,
     });
