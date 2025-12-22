@@ -46,15 +46,22 @@ export function TransactionsTable({ transactions, loading = false, onCorrect }: 
           transactions.map((transaction) => (
             <tr key={transaction.id} className="hover:bg-slate-50">
               <td className="px-6 py-4">
-                <div className="flex items-center space-x-2">
-                  {transaction.type === 'depot' ? (
-                    <ArrowDownCircle className="w-5 h-5 text-emerald-500" />
-                  ) : (
-                    <ArrowUpCircle className="w-5 h-5 text-blue-500" />
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center space-x-2">
+                    {transaction.type === 'depot' ? (
+                      <ArrowDownCircle className="w-5 h-5 text-emerald-500" />
+                    ) : (
+                      <ArrowUpCircle className="w-5 h-5 text-blue-500" />
+                    )}
+                    <span className="text-sm font-medium text-slate-900">
+                      {transaction.type === 'depot' ? 'Dépôt' : 'Retrait'}
+                    </span>
+                  </div>
+                  {transaction.is_mixed && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                      Paiement mixte
+                    </span>
                   )}
-                  <span className="text-sm font-medium text-slate-900">
-                    {transaction.type === 'depot' ? 'Dépôt' : 'Retrait'}
-                  </span>
                 </div>
               </td>
               <td className="px-6 py-4 text-sm text-slate-900">
@@ -72,8 +79,18 @@ export function TransactionsTable({ transactions, loading = false, onCorrect }: 
                   {transaction.reference}
                 </span>
               </td>
-              <td className="px-6 py-4 text-sm text-slate-600">
-                {transaction.info_client || '-'}
+              <td className="px-6 py-4">
+                <div className="flex flex-col space-y-1">
+                  {transaction.info_client && (
+                    <span className="text-sm text-slate-900">{transaction.info_client}</span>
+                  )}
+                  {transaction.is_mixed && transaction.description && (
+                    <span className="text-xs text-slate-600 italic">{transaction.description}</span>
+                  )}
+                  {!transaction.info_client && !transaction.is_mixed && (
+                    <span className="text-sm text-slate-600">-</span>
+                  )}
+                </div>
               </td>
               <td className="px-6 py-4 text-sm text-slate-600">
                 {new Date(transaction.created_at).toLocaleString('fr-FR', {

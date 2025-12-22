@@ -50,6 +50,9 @@ export interface Transaction {
   raison_correction?: string | null;
   corrigee_par?: string | null;
   corrigee_le?: string | null;
+  is_mixed?: boolean;
+  taux_change?: number | null;
+  description?: string | null;
   service?: Service;
   creator?: User;
 }

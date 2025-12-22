@@ -42,11 +42,11 @@ export function Transactions() {
       const to = from + ITEMS_PER_PAGE - 1;
 
       let transactionsQuery = supabase
-        .from('transactions')
-        .select('*, service:services(*), creator:users!transactions_created_by_fkey(*)');
+        .from('v_all_transactions')
+        .select('*, service:services(*), creator:users!v_all_transactions_created_by_fkey(*)');
 
       let countQuery = supabase
-        .from('transactions')
+        .from('v_all_transactions')
         .select('*', { count: 'exact', head: true });
 
       if (reference.trim()) {
