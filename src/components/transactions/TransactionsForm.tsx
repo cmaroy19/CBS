@@ -16,7 +16,7 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
     service_id: '',
     montant: 0,
     devise: 'USD' as 'USD' | 'CDF',
-    commission: 0,
+    reference_manuelle: '',
     info_client: '',
     notes: '',
   });
@@ -36,6 +36,18 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
 
       if (formData.montant <= 0) {
         throw new Error('Le montant doit être supérieur à zéro');
+      }
+
+      if (formData.reference_manuelle.trim()) {
+        const { data: existingTransaction } = await supabase
+          .from('transactions')
+          .select('id')
+          .eq('reference', formData.reference_manuelle.trim())
+          .maybeSingle();
+
+        if (existingTransaction) {
+          throw new Error('Cette référence existe déjà. Veuillez en choisir une autre.');
+        }
       }
 
       const soldeKey = formData.devise === 'USD' ? 'solde_virtuel_usd' : 'solde_virtuel_cdf';
@@ -64,18 +76,23 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         }
       }
 
+      const transactionData: any = {
+        type: formData.type,
+        service_id: formData.service_id,
+        montant: formData.montant,
+        devise: formData.devise,
+        info_client: formData.info_client || null,
+        notes: formData.notes || null,
+        created_by: user?.id,
+      };
+
+      if (formData.reference_manuelle.trim()) {
+        transactionData.reference = formData.reference_manuelle.trim();
+      }
+
       const { data: transaction, error: insertError } = await supabase
         .from('transactions')
-        .insert({
-          type: formData.type,
-          service_id: formData.service_id,
-          montant: formData.montant,
-          devise: formData.devise,
-          commission: formData.commission,
-          info_client: formData.info_client || null,
-          notes: formData.notes || null,
-          created_by: user?.id,
-        })
+        .insert(transactionData)
         .select()
         .single();
 
@@ -158,49 +175,34 @@ export function TransactionsForm({ services, onSuccess, onCancel }: Transactions
         </select>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Montant</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0.01"
-            value={formData.montant || ''}
-            onChange={(e) =>
-              setFormData({ ...formData, montant: parseFloat(e.target.value) || 0 })
-            }
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Commission</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={formData.commission || ''}
-            onChange={(e) =>
-              setFormData({ ...formData, commission: parseFloat(e.target.value) || 0 })
-            }
-            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          />
-        </div>
+      <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">Montant</label>
+        <input
+          type="number"
+          step="0.01"
+          min="0.01"
+          value={formData.montant || ''}
+          onChange={(e) =>
+            setFormData({ ...formData, montant: parseFloat(e.target.value) || 0 })
+          }
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          required
+        />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Référence</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">
+          Référence <span className="text-slate-500 font-normal">(optionnel)</span>
+        </label>
         <input
           type="text"
-          value="Automatique"
-          readOnly
-          disabled
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-500 cursor-not-allowed"
-          placeholder="DD-MM-YYYY-####"
+          value={formData.reference_manuelle}
+          onChange={(e) => setFormData({ ...formData, reference_manuelle: e.target.value })}
+          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          placeholder="Ex: TRX-2024-001"
         />
         <p className="text-xs text-slate-500 mt-1">
-          La référence sera générée automatiquement au format DD-MM-YYYY-####
+          Laissez vide pour génération automatique. La référence doit être unique.
         </p>
       </div>
 

@@ -15,7 +15,6 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
           'Type',
           'Service',
           'Montant',
-          'Commission',
           'Référence',
           'Info client',
           'Date',
@@ -24,7 +23,7 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
       >
         {loading ? (
           <tr>
-            <td colSpan={8} className="px-6 py-12 text-center">
+            <td colSpan={7} className="px-6 py-12 text-center">
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
                 <span className="text-slate-600">Chargement...</span>
@@ -33,8 +32,8 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
           </tr>
         ) : transactions.length === 0 ? (
           <tr>
-            <td colSpan={8} className="px-6 py-12 text-center text-slate-500">
-              Aucune transaction trouvée pour cette date
+            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+              Aucune transaction trouvée
             </td>
           </tr>
         ) : (
@@ -61,14 +60,6 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
                   maximumFractionDigits: 2,
                 }).format(transaction.montant)}{' '}
                 {transaction.devise}
-              </td>
-              <td className="px-6 py-4 text-sm text-slate-600">
-                {transaction.commission > 0
-                  ? `${new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(transaction.commission)} ${transaction.devise}`
-                  : '-'}
               </td>
               <td className="px-6 py-4 text-sm text-slate-600">
                 <span className="font-mono text-xs bg-slate-100 px-2 py-1 rounded">
