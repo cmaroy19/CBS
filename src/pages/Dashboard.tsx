@@ -6,7 +6,9 @@ import { CurrencySection } from '../components/dashboard/CurrencySection';
 import { RecentTransactions } from '../components/dashboard/RecentTransactions';
 import { AlertsPanel } from '../components/dashboard/AlertsPanel';
 import ServiceBalances from '../components/dashboard/ServiceBalances';
-import { Activity, TrendingUp, Users } from 'lucide-react';
+import { Activity, TrendingUp, Users, LayoutGrid, Building2 } from 'lucide-react';
+
+type DashboardView = 'overview' | 'services';
 
 interface DashboardStats {
   cash_usd: number;
@@ -51,6 +53,7 @@ interface ServiceBalance {
 export function Dashboard() {
   const services = useDataStore(state => state.services);
   const serviceBalances = useServiceBalances();
+  const [activeView, setActiveView] = useState<DashboardView>('overview');
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentTransactions, setRecentTransactions] = useState<RecentTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -194,84 +197,137 @@ export function Dashboard() {
         <p className="text-slate-600">Vue d'ensemble en temps réel</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Transactions</h3>
-            <Activity className="w-5 h-5 text-emerald-500" />
-          </div>
-          <p className="text-3xl font-bold text-slate-900">{stats.transactions_today}</p>
-          <div className="mt-3 pt-3 border-t border-slate-200">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-slate-600">Volume USD</span>
-              <span className="font-semibold text-slate-900">
-                {stats.volume_today_usd.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm mt-1">
-              <span className="text-slate-600">Volume CDF</span>
-              <span className="font-semibold text-slate-900">
-                {stats.volume_today_cdf.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Activité</h3>
-            <TrendingUp className="w-5 h-5 text-amber-500" />
-          </div>
-          <p className="text-3xl font-bold text-slate-900">{stats.approvisionnements_today}</p>
-          <p className="text-sm text-slate-500 mt-2">Approvisionnements</p>
-          <div className="mt-3 pt-3 border-t border-slate-200">
-            <p className="text-sm text-slate-600">{stats.change_operations_today} opérations de change</p>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-slate-900">Système</h3>
-            <Users className="w-5 h-5 text-blue-500" />
-          </div>
-          <p className="text-3xl font-bold text-slate-900">{stats.services_actifs}</p>
-          <p className="text-sm text-slate-500 mt-2">Services actifs</p>
-          <div className="mt-3 pt-3 border-t border-slate-200">
-            <p className="text-sm text-slate-600">{stats.users_actifs} utilisateurs actifs</p>
-          </div>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="flex border-b border-gray-200">
+          <button
+            onClick={() => setActiveView('overview')}
+            className={`flex items-center space-x-2 px-6 py-3 font-medium transition-colors ${
+              activeView === 'overview'
+                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5" />
+            <span>Vue d'ensemble</span>
+          </button>
+          <button
+            onClick={() => setActiveView('services')}
+            className={`flex items-center space-x-2 px-6 py-3 font-medium transition-colors ${
+              activeView === 'services'
+                ? 'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+            }`}
+          >
+            <Building2 className="w-5 h-5" />
+            <span>Détails par Service</span>
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CurrencySection
-          currency="USD"
-          cashBalance={stats.cash_usd}
-          virtualBalance={stats.virtual_usd}
-          commissions={stats.commissions_today_usd}
-          totalGeneral={totalUSD}
-        />
+      {activeView === 'overview' && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">Transactions</h3>
+                <Activity className="w-5 h-5 text-emerald-500" />
+              </div>
+              <p className="text-3xl font-bold text-slate-900">{stats.transactions_today}</p>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-600">Volume USD</span>
+                  <span className="font-semibold text-slate-900">
+                    {stats.volume_today_usd.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mt-1">
+                  <span className="text-slate-600">Volume CDF</span>
+                  <span className="font-semibold text-slate-900">
+                    {stats.volume_today_cdf.toLocaleString('fr-FR', { minimumFractionDigits: 0 })}
+                  </span>
+                </div>
+              </div>
+            </div>
 
-        <CurrencySection
-          currency="CDF"
-          cashBalance={stats.cash_cdf}
-          virtualBalance={stats.virtual_cdf}
-          commissions={0}
-          totalGeneral={totalCDF}
-        />
-      </div>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">Activité</h3>
+                <TrendingUp className="w-5 h-5 text-amber-500" />
+              </div>
+              <p className="text-3xl font-bold text-slate-900">{stats.approvisionnements_today}</p>
+              <p className="text-sm text-slate-500 mt-2">Approvisionnements</p>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <p className="text-sm text-slate-600">{stats.change_operations_today} opérations de change</p>
+              </div>
+            </div>
 
-      {serviceBalances.length > 0 && (
-        <ServiceBalances services={serviceBalances} />
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">Système</h3>
+                <Users className="w-5 h-5 text-blue-500" />
+              </div>
+              <p className="text-3xl font-bold text-slate-900">{stats.services_actifs}</p>
+              <p className="text-sm text-slate-500 mt-2">Services actifs</p>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <p className="text-sm text-slate-600">{stats.users_actifs} utilisateurs actifs</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <CurrencySection
+              currency="USD"
+              cashBalance={stats.cash_usd}
+              virtualBalance={stats.virtual_usd}
+              commissions={stats.commissions_today_usd}
+              totalGeneral={totalUSD}
+            />
+
+            <CurrencySection
+              currency="CDF"
+              cashBalance={stats.cash_cdf}
+              virtualBalance={stats.virtual_cdf}
+              commissions={0}
+              totalGeneral={totalCDF}
+            />
+          </div>
+
+          <AlertsPanel
+            cashUsd={stats.cash_usd}
+            cashCdf={stats.cash_cdf}
+            minCashUsd={1000}
+            minCashCdf={1000000}
+          />
+
+          <RecentTransactions transactions={recentTransactions} />
+        </>
       )}
 
-      <AlertsPanel
-        cashUsd={stats.cash_usd}
-        cashCdf={stats.cash_cdf}
-        minCashUsd={1000}
-        minCashCdf={1000000}
-      />
+      {activeView === 'services' && (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <CurrencySection
+              currency="USD"
+              cashBalance={stats.cash_usd}
+              virtualBalance={stats.virtual_usd}
+              commissions={stats.commissions_today_usd}
+              totalGeneral={totalUSD}
+            />
 
-      <RecentTransactions transactions={recentTransactions} />
+            <CurrencySection
+              currency="CDF"
+              cashBalance={stats.cash_cdf}
+              virtualBalance={stats.virtual_cdf}
+              commissions={0}
+              totalGeneral={totalCDF}
+            />
+          </div>
+
+          {serviceBalances.length > 0 && (
+            <ServiceBalances services={serviceBalances} />
+          )}
+        </>
+      )}
     </div>
   );
 }

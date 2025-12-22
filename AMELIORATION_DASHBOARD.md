@@ -2,13 +2,43 @@
 
 ## Résumé Exécutif
 
-Le tableau de bord principal a été considérablement amélioré pour offrir une visibilité complète sur les soldes globaux et détaillés par service, avec des mises à jour en temps réel.
+Le tableau de bord principal a été considérablement amélioré avec un système d'onglets permettant de basculer entre vue d'ensemble globale et vue détaillée par service, avec des mises à jour en temps réel.
+
+**Nouveauté:** Interface à onglets pour éviter un scroll trop long et améliorer l'expérience utilisateur.
 
 ---
 
 ## Nouvelles Fonctionnalités
 
-### 1. Vue Database pour les Soldes par Service
+### 1. Système d'Onglets pour Navigation Optimale
+
+**Implémentation:** Interface à deux onglets dans le Dashboard principal
+
+Le dashboard utilise désormais un système d'onglets pour organiser l'information de manière claire et éviter un scroll excessif :
+
+**Onglet 1 : Vue d'ensemble**
+- Statistiques quotidiennes (Transactions, Activité, Système)
+- Soldes globaux par devise (USD et CDF)
+- Panneau d'alertes (seuils de trésorerie)
+- Transactions récentes
+
+**Onglet 2 : Détails par Service**
+- Soldes globaux par devise (USD et CDF)
+- Grille détaillée de tous les services actifs
+- Soldes virtuels USD et CDF par service
+- Totaux agrégés
+
+**Avantages:**
+- Navigation rapide et intuitive
+- Pas de scroll excessif
+- Contenu organisé par contexte d'utilisation
+- Design moderne avec indicateur visuel d'onglet actif
+
+**État par défaut:** Vue d'ensemble au chargement du dashboard
+
+---
+
+### 2. Vue Database pour les Soldes par Service
 
 **Migration:** `create_service_balances_view.sql`
 
@@ -26,7 +56,7 @@ Une nouvelle vue `v_service_balances` a été créée pour agréger les soldes d
 
 ---
 
-### 2. Composant ServiceBalances
+### 3. Composant ServiceBalances
 
 **Fichier:** `src/components/dashboard/ServiceBalances.tsx`
 
@@ -47,7 +77,7 @@ Un nouveau composant React affiche une grille de cartes pour chaque service :
 
 ---
 
-### 3. Hook Personnalisé useServiceBalances
+### 4. Hook Personnalisé useServiceBalances
 
 **Fichier:** `src/hooks/useServiceBalances.ts`
 
@@ -66,28 +96,34 @@ Un hook React personnalisé gère le chargement et la mise à jour automatique d
 
 ---
 
-### 4. Mise à Jour du Dashboard Principal
+### 5. Mise à Jour du Dashboard Principal
 
 **Fichier:** `src/pages/Dashboard.tsx`
 
-Le dashboard a été enrichi avec :
+Le dashboard a été complètement restructuré avec un système d'onglets :
 
 **Ajouts:**
-- Section ServiceBalances affichée entre les cartes de devises et les alertes
+- Système d'onglets avec état React (`activeView`)
+- Onglets cliquables avec feedback visuel
+- Affichage conditionnel du contenu selon l'onglet actif
 - Utilisation du hook `useServiceBalances()` pour données temps réel
-- Affichage conditionnel (seulement si des services existent)
+- Icônes Lucide (LayoutGrid, Building2) pour les onglets
 
 **Structure actuelle du Dashboard:**
 1. Titre et description
-2. Statistiques rapides (Transactions, Activité, Système)
-3. **Sections de devises (USD et CDF)** - Soldes globaux
-4. **NOUVEAU: Soldes par Service** - Détails par service
-5. Panneau d'alertes
-6. Transactions récentes
+2. **NOUVEAU: Barre d'onglets** (Vue d'ensemble / Détails par Service)
+3. Contenu dynamique selon l'onglet sélectionné :
+   - **Vue d'ensemble:** Stats, devises, alertes, transactions récentes
+   - **Détails par Service:** Devises + grille détaillée des services
+
+**Navigation:**
+- Clic sur onglet = changement instantané de vue
+- Pas de rechargement de page
+- Données toujours synchronisées en temps réel
 
 ---
 
-### 5. Amélioration du Temps Réel
+### 6. Amélioration du Temps Réel
 
 **Fichier:** `src/hooks/useOptimizedRealtime.ts`
 
@@ -169,10 +205,19 @@ Composant ServiceBalances se re-rend automatiquement
 
 ### Pour les Utilisateurs
 
-1. **Consultez les soldes globaux** dans les cartes USD et CDF
-2. **Explorez les détails par service** dans la section "Soldes par Service"
-3. **Surveillez les totaux** en bas de la section des services
-4. Les données se mettent à jour automatiquement après chaque transaction
+1. **Accédez au Dashboard** - Vue d'ensemble s'affiche par défaut
+2. **Vue d'ensemble:**
+   - Consultez les statistiques du jour (transactions, approvisionnements, change)
+   - Vérifiez les soldes globaux USD et CDF
+   - Surveillez les alertes de trésorerie
+   - Consultez les transactions récentes
+3. **Basculez vers "Détails par Service"** via l'onglet en haut
+4. **Vue détaillée:**
+   - Consultez les soldes globaux (rappel en haut)
+   - Explorez les cartes individuelles de chaque service
+   - Surveillez les soldes virtuels USD et CDF par service
+   - Vérifiez les totaux agrégés en bas
+5. **Mise à jour automatique** - Les données se rafraîchissent en temps réel après chaque transaction, quel que soit l'onglet actif
 
 ### Pour les Développeurs
 
