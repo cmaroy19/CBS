@@ -10,7 +10,6 @@ import { Transactions } from './pages/Transactions';
 import { Approvisionnements } from './pages/Approvisionnements';
 import { Change } from './pages/Change';
 import { Commissions } from './pages/Commissions';
-import { Clotures } from './pages/Clotures';
 import { Rapports } from './pages/Rapports';
 import { Profil } from './pages/Profil';
 import { Utilisateurs } from './pages/Utilisateurs';
@@ -54,8 +53,6 @@ function App() {
         return <Change />;
       case 'commissions':
         return <Commissions />;
-      case 'clotures':
-        return <Clotures />;
       case 'rapports':
         return <Rapports />;
       case 'profil':
