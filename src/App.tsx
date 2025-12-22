@@ -9,6 +9,7 @@ import { Services } from './pages/Services';
 import { Transactions } from './pages/Transactions';
 import { Approvisionnements } from './pages/Approvisionnements';
 import { Change } from './pages/Change';
+import { Commissions } from './pages/Commissions';
 import { Rapports } from './pages/Rapports';
 import { Profil } from './pages/Profil';
 import { Utilisateurs } from './pages/Utilisateurs';
@@ -50,6 +51,8 @@ function App() {
         return <Approvisionnements />;
       case 'change':
         return <Change />;
+      case 'commissions':
+        return <Commissions />;
       case 'rapports':
         return <Rapports />;
       case 'profil':

@@ -5,6 +5,7 @@ import { useServiceBalances } from '../hooks/useServiceBalances';
 import { CurrencySection } from '../components/dashboard/CurrencySection';
 import { RecentTransactions } from '../components/dashboard/RecentTransactions';
 import { AlertsPanel } from '../components/dashboard/AlertsPanel';
+import { CommissionsOverview } from '../components/dashboard/CommissionsOverview';
 import ServiceBalances from '../components/dashboard/ServiceBalances';
 import { Activity, TrendingUp, Users, LayoutGrid, Building2 } from 'lucide-react';
 
@@ -300,7 +301,10 @@ export function Dashboard() {
             minCashCdf={1000000}
           />
 
-          <RecentTransactions transactions={recentTransactions} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <CommissionsOverview />
+            <RecentTransactions transactions={recentTransactions} />
+          </div>
         </>
       )}
 

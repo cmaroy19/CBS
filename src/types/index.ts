@@ -93,3 +93,17 @@ export interface RealtimeBalance {
   total_virtuel_usd: number | null;
   total_virtuel_cdf: number | null;
 }
+
+export interface CommissionJournaliere {
+  id: string;
+  date_cloture: string;
+  commission_usd: number;
+  commission_cdf: number;
+  service_id: string | null;
+  notes: string | null;
+  saisie_par: string | null;
+  created_at: string;
+  updated_at: string;
+  service?: Service;
+  saisie_par_user?: User;
+}
