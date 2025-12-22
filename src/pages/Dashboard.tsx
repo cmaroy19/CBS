@@ -88,7 +88,7 @@ export function Dashboard() {
         .select(`
           id,
           reference,
-          type_transaction,
+          type,
           montant,
           devise,
           info_client,
@@ -101,6 +101,7 @@ export function Dashboard() {
           if (res.data) {
             const formatted = res.data.map((t: any) => ({
               ...t,
+              type_transaction: t.type,
               service_nom: t.service?.nom || null,
             }));
             setRecentTransactions(formatted);

@@ -41,7 +41,7 @@ export function Transactions() {
 
       let transactionsQuery = supabase
         .from('transactions')
-        .select('*, service:services(*), creator:users(*)');
+        .select('*, service:services(*), creator:users!transactions_created_by_fkey(*)');
 
       let countQuery = supabase
         .from('transactions')
