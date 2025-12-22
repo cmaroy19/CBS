@@ -27,7 +27,7 @@ export function Transactions() {
     return `${year}-${month}-${day}`;
   };
 
-  const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
+  const [selectedDate, setSelectedDate] = useState('');
   const [searchReference, setSearchReference] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
@@ -50,7 +50,7 @@ export function Transactions() {
       if (reference.trim()) {
         transactionsQuery = transactionsQuery.ilike('reference', `%${reference.trim()}%`);
         countQuery = countQuery.ilike('reference', `%${reference.trim()}%`);
-      } else {
+      } else if (date) {
         const startOfDay = `${date}T00:00:00`;
         const endOfDay = `${date}T23:59:59`;
         transactionsQuery = transactionsQuery
@@ -98,10 +98,8 @@ export function Transactions() {
   };
 
   useEffect(() => {
-    if (!isSearching) {
-      loadData(1, selectedDate, '');
-      setCurrentPage(1);
-    }
+    loadData(1, selectedDate, '');
+    setCurrentPage(1);
   }, [selectedDate]);
 
   useEffect(() => {
@@ -191,7 +189,7 @@ export function Transactions() {
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
           <div className="flex items-center space-x-3">
             <Calendar className="w-5 h-5 text-slate-600" />
-            <label className="text-sm font-medium text-slate-700">Date :</label>
+            <label className="text-sm font-medium text-slate-700">Filtrer par date :</label>
             <input
               type="date"
               value={selectedDate}
@@ -199,6 +197,14 @@ export function Transactions() {
               disabled={isSearching}
               className="px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
             />
+            {selectedDate && (
+              <button
+                onClick={() => setSelectedDate('')}
+                className="text-sm text-slate-600 hover:text-slate-900 underline"
+              >
+                Effacer
+              </button>
+            )}
             <span className="text-sm text-slate-600">
               {totalCount} transaction{totalCount > 1 ? 's' : ''}
             </span>
