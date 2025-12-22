@@ -106,3 +106,32 @@ export interface CommissionJournaliere {
   service?: Service;
   saisie_par_user?: User;
 }
+
+export type ClotureStatut = 'brouillon' | 'validee' | 'verrouillee';
+
+export interface ClotureJournaliere {
+  id: string;
+  date_cloture: string;
+  service_id: string;
+  solde_ouverture_usd: number;
+  solde_ouverture_cdf: number;
+  solde_cloture_usd: number;
+  solde_cloture_cdf: number;
+  commission_usd: number;
+  commission_cdf: number;
+  ecart_usd: number;
+  ecart_cdf: number;
+  notes: string | null;
+  statut: ClotureStatut;
+  validee_par: string | null;
+  validee_le: string | null;
+  verrouillee_par: string | null;
+  verrouillee_le: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  service?: Service;
+  validee_par_user?: User;
+  verrouillee_par_user?: User;
+  created_by_user?: User;
+}
