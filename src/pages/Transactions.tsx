@@ -4,6 +4,7 @@ import { useDataStore } from '../stores/dataStore';
 import { Modal } from '../components/ui/Modal';
 import { Plus, Calendar, Search, X } from 'lucide-react';
 import { TransactionsForm } from '../components/transactions/TransactionsForm';
+import { TransactionMixteForm } from '../components/transactions/TransactionMixteForm';
 import { TransactionsTable } from '../components/transactions/TransactionsTable';
 import { TransactionCorrectionModal } from '../components/transactions/TransactionCorrectionModal';
 import type { Transaction } from '../types';
@@ -15,6 +16,7 @@ export function Transactions() {
   const setServices = useDataStore(state => state.setServices);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [transactionMode, setTransactionMode] = useState<'simple' | 'mixte'>('simple');
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
@@ -270,11 +272,44 @@ export function Transactions() {
         title="Nouvelle transaction"
         size="lg"
       >
-        <TransactionsForm
-          services={services}
-          onSuccess={handleSuccess}
-          onCancel={handleCancel}
-        />
+        <div className="space-y-4">
+          <div className="flex items-center space-x-2 p-2 bg-slate-50 rounded-lg">
+            <button
+              onClick={() => setTransactionMode('simple')}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                transactionMode === 'simple'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Transaction simple
+            </button>
+            <button
+              onClick={() => setTransactionMode('mixte')}
+              className={`flex-1 px-4 py-2 rounded-lg font-medium transition-colors ${
+                transactionMode === 'mixte'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-white text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              Paiement mixte (Forex)
+            </button>
+          </div>
+
+          {transactionMode === 'simple' ? (
+            <TransactionsForm
+              services={services}
+              onSuccess={handleSuccess}
+              onCancel={handleCancel}
+            />
+          ) : (
+            <TransactionMixteForm
+              services={services}
+              onSuccess={handleSuccess}
+              onCancel={handleCancel}
+            />
+          )}
+        </div>
       </Modal>
 
       <TransactionCorrectionModal

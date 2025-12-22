@@ -13,7 +13,8 @@ import {
   Users,
   LogOut,
   Menu,
-  X
+  X,
+  TrendingUp
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -34,6 +35,7 @@ export function Layout({ children, currentPage, onNavigate }: LayoutProps) {
     { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
     { id: 'approvisionnements', label: 'Approvisionnements', icon: Package },
     { id: 'change', label: 'Change', icon: Repeat },
+    { id: 'taux-change', label: 'Taux de change', icon: TrendingUp },
     { id: 'commissions', label: 'Commissions', icon: DollarSign },
     { id: 'rapports', label: 'Rapports', icon: FileText },
     { id: 'utilisateurs', label: 'Utilisateurs', icon: Users, adminOnly: true },

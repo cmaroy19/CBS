@@ -106,3 +106,23 @@ export interface CommissionJournaliere {
   service?: Service;
   saisie_par_user?: User;
 }
+
+export interface ExchangeRate {
+  id: string;
+  devise_source: Devise;
+  devise_destination: Devise;
+  taux: number;
+  actif: boolean;
+  date_debut: string;
+  date_fin: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TransactionMixtePayload {
+  montant_usd_cash: number;
+  montant_cdf_cash: number;
+  taux_utilise: number;
+}
