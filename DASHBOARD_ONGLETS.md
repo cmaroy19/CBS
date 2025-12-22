@@ -16,11 +16,10 @@ Vue globale avec toutes les informations essentielles :
 - 📜 Transactions récentes
 
 ### Onglet 2 : Détails par Service
-Vue détaillée des services :
-- 💵 Soldes globaux (rappel en haut)
+Vue détaillée focus sur les services :
 - 🏢 Grille des services actifs (M-Pesa, Airtel Money, etc.)
 - 📊 Soldes virtuels USD et CDF par service
-- ➕ Totaux agrégés
+- ➕ Totaux agrégés des soldes virtuels
 
 ---
 
@@ -37,9 +36,11 @@ Vue détaillée des services :
 ## Utilisation
 
 1. Par défaut, la **Vue d'ensemble** s'affiche au chargement
-2. Cliquez sur **"Détails par Service"** pour voir les soldes détaillés
+2. Cliquez sur **"Détails par Service"** pour voir uniquement les soldes par service
 3. Basculez entre les onglets à tout moment
 4. Les données sont synchronisées en temps réel automatiquement
+
+**Note:** L'onglet "Détails par Service" est optimisé pour consulter rapidement les soldes de chaque service sans distraction.
 
 ---
 

@@ -305,24 +305,6 @@ export function Dashboard() {
 
       {activeView === 'services' && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <CurrencySection
-              currency="USD"
-              cashBalance={stats.cash_usd}
-              virtualBalance={stats.virtual_usd}
-              commissions={stats.commissions_today_usd}
-              totalGeneral={totalUSD}
-            />
-
-            <CurrencySection
-              currency="CDF"
-              cashBalance={stats.cash_cdf}
-              virtualBalance={stats.virtual_cdf}
-              commissions={0}
-              totalGeneral={totalCDF}
-            />
-          </div>
-
           {serviceBalances.length > 0 && (
             <ServiceBalances services={serviceBalances} />
           )}

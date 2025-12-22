@@ -23,10 +23,9 @@ Le dashboard utilise désormais un système d'onglets pour organiser l'informati
 - Transactions récentes
 
 **Onglet 2 : Détails par Service**
-- Soldes globaux par devise (USD et CDF)
 - Grille détaillée de tous les services actifs
 - Soldes virtuels USD et CDF par service
-- Totaux agrégés
+- Totaux agrégés des soldes virtuels
 
 **Avantages:**
 - Navigation rapide et intuitive
@@ -114,7 +113,7 @@ Le dashboard a été complètement restructuré avec un système d'onglets :
 2. **NOUVEAU: Barre d'onglets** (Vue d'ensemble / Détails par Service)
 3. Contenu dynamique selon l'onglet sélectionné :
    - **Vue d'ensemble:** Stats, devises, alertes, transactions récentes
-   - **Détails par Service:** Devises + grille détaillée des services
+   - **Détails par Service:** Grille détaillée des services uniquement
 
 **Navigation:**
 - Clic sur onglet = changement instantané de vue
@@ -213,7 +212,6 @@ Composant ServiceBalances se re-rend automatiquement
    - Consultez les transactions récentes
 3. **Basculez vers "Détails par Service"** via l'onglet en haut
 4. **Vue détaillée:**
-   - Consultez les soldes globaux (rappel en haut)
    - Explorez les cartes individuelles de chaque service
    - Surveillez les soldes virtuels USD et CDF par service
    - Vérifiez les totaux agrégés en bas
