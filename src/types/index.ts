@@ -46,6 +46,11 @@ export interface Transaction {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  annule: boolean;
+  transaction_origine_id: string | null;
+  raison_correction: string | null;
+  corrigee_par: string | null;
+  corrigee_le: string | null;
   service?: Service;
   creator?: User;
 }

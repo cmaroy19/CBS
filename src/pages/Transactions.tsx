@@ -5,6 +5,7 @@ import { Modal } from '../components/ui/Modal';
 import { Plus, Calendar, Search, X } from 'lucide-react';
 import { TransactionsForm } from '../components/transactions/TransactionsForm';
 import { TransactionsTable } from '../components/transactions/TransactionsTable';
+import { TransactionCorrectionModal } from '../components/transactions/TransactionCorrectionModal';
 import type { Transaction } from '../types';
 
 const ITEMS_PER_PAGE = 20;
@@ -29,6 +30,8 @@ export function Transactions() {
   const [selectedDate, setSelectedDate] = useState(formatDateForInput(new Date()));
   const [searchReference, setSearchReference] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+  const [transactionToCorrect, setTransactionToCorrect] = useState<Transaction | null>(null);
 
   const loadData = async (page = 1, date = selectedDate, reference = searchReference) => {
     setLoading(true);
@@ -135,6 +138,26 @@ export function Transactions() {
     setIsModalOpen(false);
   };
 
+  const handleCorrect = (transaction: Transaction) => {
+    setTransactionToCorrect(transaction);
+    setIsCorrectionModalOpen(true);
+  };
+
+  const handleCorrectionSuccess = () => {
+    setIsCorrectionModalOpen(false);
+    setTransactionToCorrect(null);
+    if (isSearching) {
+      loadData(currentPage, selectedDate, searchReference);
+    } else {
+      loadData(currentPage, selectedDate, '');
+    }
+  };
+
+  const handleCorrectionCancel = () => {
+    setIsCorrectionModalOpen(false);
+    setTransactionToCorrect(null);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -217,7 +240,7 @@ export function Transactions() {
         </div>
       </div>
 
-      <TransactionsTable transactions={transactions} loading={loading} />
+      <TransactionsTable transactions={transactions} loading={loading} onCorrect={handleCorrect} />
 
       {totalPages > 1 && (
         <div className="flex items-center justify-center space-x-2">
@@ -253,6 +276,13 @@ export function Transactions() {
           onCancel={handleCancel}
         />
       </Modal>
+
+      <TransactionCorrectionModal
+        isOpen={isCorrectionModalOpen}
+        onClose={handleCorrectionCancel}
+        transaction={transactionToCorrect}
+        onSuccess={handleCorrectionSuccess}
+      />
     </div>
   );
 }

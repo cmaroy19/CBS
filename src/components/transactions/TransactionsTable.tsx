@@ -1,13 +1,18 @@
-import { ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, AlertCircle, Ban } from 'lucide-react';
 import { Table } from '../ui/Table';
+import { useAuthStore } from '../../stores/authStore';
 import type { Transaction } from '../../types';
 
 interface TransactionsTableProps {
   transactions: Transaction[];
   loading?: boolean;
+  onCorrect?: (transaction: Transaction) => void;
 }
 
-export function TransactionsTable({ transactions, loading = false }: TransactionsTableProps) {
+export function TransactionsTable({ transactions, loading = false, onCorrect }: TransactionsTableProps) {
+  const { user } = useAuthStore();
+  const canCorrect = user?.role === 'Administrateur' || user?.role === 'Proprietaire';
+
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
       <Table
@@ -19,11 +24,12 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
           'Info client',
           'Date',
           'Créé par',
+          ...(canCorrect ? ['Actions'] : []),
         ]}
       >
         {loading ? (
           <tr>
-            <td colSpan={7} className="px-6 py-12 text-center">
+            <td colSpan={canCorrect ? 8 : 7} className="px-6 py-12 text-center">
               <div className="flex items-center justify-center space-x-2">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500"></div>
                 <span className="text-slate-600">Chargement...</span>
@@ -32,7 +38,7 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
           </tr>
         ) : transactions.length === 0 ? (
           <tr>
-            <td colSpan={7} className="px-6 py-12 text-center text-slate-500">
+            <td colSpan={canCorrect ? 8 : 7} className="px-6 py-12 text-center text-slate-500">
               Aucune transaction trouvée
             </td>
           </tr>
@@ -81,6 +87,30 @@ export function TransactionsTable({ transactions, loading = false }: Transaction
               <td className="px-6 py-4 text-sm text-slate-600">
                 {transaction.creator?.nom_complet || 'N/A'}
               </td>
+              {canCorrect && (
+                <td className="px-6 py-4">
+                  {transaction.annule ? (
+                    <div className="flex items-center space-x-2 text-slate-500">
+                      <Ban className="w-4 h-4" />
+                      <span className="text-xs">Annulée</span>
+                    </div>
+                  ) : transaction.transaction_origine_id ? (
+                    <div className="flex items-center space-x-2 text-blue-600">
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-xs">Correction</span>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => onCorrect?.(transaction)}
+                      className="flex items-center space-x-1 text-amber-600 hover:text-amber-700 transition-colors"
+                      title="Corriger cette transaction"
+                    >
+                      <AlertCircle className="w-4 h-4" />
+                      <span className="text-xs font-medium">Corriger</span>
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))
         )}
