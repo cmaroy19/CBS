@@ -39,18 +39,16 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
 
     const calculateTotalsByDevise = () => {
       const totals = {
-        USD: { volume: 0, commissions: 0, operations: 0 },
-        CDF: { volume: 0, commissions: 0, operations: 0 },
+        USD: { volume: 0, operations: 0 },
+        CDF: { volume: 0, operations: 0 },
       };
 
       transactions.forEach((t) => {
         if (t.devise === 'USD') {
           totals.USD.volume += t.montant;
-          totals.USD.commissions += t.commission;
           totals.USD.operations++;
         } else if (t.devise === 'CDF') {
           totals.CDF.volume += t.montant;
-          totals.CDF.commissions += t.commission;
           totals.CDF.operations++;
         }
       });
@@ -67,8 +65,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
 
       totals.USD.volume += changeOperations.reduce((sum, c) => sum + c.montant_usd, 0);
       totals.CDF.volume += changeOperations.reduce((sum, c) => sum + c.montant_cdf, 0);
-      totals.USD.commissions += changeOperations.filter(c => c.sens === 'cdf_to_usd').reduce((sum, c) => sum + c.commission, 0);
-      totals.CDF.commissions += changeOperations.filter(c => c.sens === 'usd_to_cdf').reduce((sum, c) => sum + c.commission, 0);
       totals.USD.operations += changeOperations.length;
 
       return totals;
@@ -156,7 +152,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                   <th className="text-left">Type</th>
                   <th className="text-right">Nombre</th>
                   <th className="text-right">Volume (USD)</th>
-                  <th className="text-right">Commissions (USD)</th>
                 </tr>
               </thead>
               <tbody>
@@ -175,16 +170,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                         .reduce((sum, t) => sum + t.montant, 0)
                     )}
                   </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'depot' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
                 </tr>
                 <tr>
                   <td>Retraits</td>
@@ -201,68 +186,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                         .reduce((sum, t) => sum + t.montant, 0)
                     )}
                   </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'retrait' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Transferts</td>
-                  <td className="text-right">
-                    {transactions.filter((t) => t.type === 'transfert' && t.devise === 'USD').length}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'transfert' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.montant, 0)
-                    )}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'transfert' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Paiements</td>
-                  <td className="text-right">
-                    {transactions.filter((t) => t.type === 'paiement' && t.devise === 'USD').length}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'paiement' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.montant, 0)
-                    )}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'paiement' && t.devise === 'USD')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
                 </tr>
                 <tr>
                   <td>Approvisionnements</td>
@@ -273,7 +196,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                       maximumFractionDigits: 2,
                     }).format(approvisionnements.filter((a) => a.devise === 'USD').reduce((sum, a) => sum + a.montant, 0))}
                   </td>
-                  <td className="text-right">-</td>
                 </tr>
                 <tr>
                   <td>Opérations de change</td>
@@ -285,12 +207,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                     }).format(
                       changeOperations.reduce((sum, c) => sum + c.montant_usd, 0)
                     )}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(changeOperations.reduce((sum, c) => sum + c.commission, 0))}
                   </td>
                 </tr>
               </tbody>
@@ -304,7 +220,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                   <th className="text-left">Type</th>
                   <th className="text-right">Nombre</th>
                   <th className="text-right">Volume (CDF)</th>
-                  <th className="text-right">Commissions (CDF)</th>
                 </tr>
               </thead>
               <tbody>
@@ -323,16 +238,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                         .reduce((sum, t) => sum + t.montant, 0)
                     )}
                   </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'depot' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
                 </tr>
                 <tr>
                   <td>Retraits</td>
@@ -349,68 +254,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                         .reduce((sum, t) => sum + t.montant, 0)
                     )}
                   </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'retrait' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Transferts</td>
-                  <td className="text-right">
-                    {transactions.filter((t) => t.type === 'transfert' && t.devise === 'CDF').length}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'transfert' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.montant, 0)
-                    )}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'transfert' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <td>Paiements</td>
-                  <td className="text-right">
-                    {transactions.filter((t) => t.type === 'paiement' && t.devise === 'CDF').length}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'paiement' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.montant, 0)
-                    )}
-                  </td>
-                  <td className="text-right">
-                    {new Intl.NumberFormat('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    }).format(
-                      transactions
-                        .filter((t) => t.type === 'paiement' && t.devise === 'CDF')
-                        .reduce((sum, t) => sum + t.commission, 0)
-                    )}
-                  </td>
                 </tr>
                 <tr>
                   <td>Approvisionnements</td>
@@ -421,7 +264,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                       maximumFractionDigits: 2,
                     }).format(approvisionnements.filter((a) => a.devise === 'CDF').reduce((sum, a) => sum + a.montant, 0))}
                   </td>
-                  <td className="text-right">-</td>
                 </tr>
                 <tr>
                   <td>Opérations de change</td>
@@ -434,7 +276,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                       changeOperations.reduce((sum, c) => sum + c.montant_cdf, 0)
                     )}
                   </td>
-                  <td className="text-right">-</td>
                 </tr>
               </tbody>
             </table>
@@ -459,16 +300,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                       $
                     </span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-slate-600">Commissions :</span>
-                    <span className="font-semibold">
-                      {new Intl.NumberFormat('fr-FR', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      }).format(totals.USD.commissions)}{' '}
-                      $
-                    </span>
-                  </div>
                 </div>
               </div>
 
@@ -486,16 +317,6 @@ export const PrintableReport = forwardRef<HTMLDivElement, PrintableReportProps>(
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       }).format(totals.CDF.volume)}{' '}
-                      FC
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-slate-600">Commissions :</span>
-                    <span className="font-semibold">
-                      {new Intl.NumberFormat('fr-FR', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      }).format(totals.CDF.commissions)}{' '}
                       FC
                     </span>
                   </div>

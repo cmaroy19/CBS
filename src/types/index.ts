@@ -40,7 +40,6 @@ export interface Transaction {
   service_id: string;
   montant: number;
   devise: Devise;
-  commission: number;
   reference: string;
   info_client: string | null;
   notes: string | null;

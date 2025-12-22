@@ -2,17 +2,20 @@ import { DollarSign, Banknote, TrendingUp, Activity } from 'lucide-react';
 
 interface CurrencyData {
   transactions: {
-    depots: { count: number; volume: number; commissions: number };
-    retraits: { count: number; volume: number; commissions: number };
+    depots: { count: number; volume: number };
+    retraits: { count: number; volume: number };
   };
   approvisionnements: {
     entrees: { count: number; volume: number };
     sorties: { count: number; volume: number };
   };
+  commissions: {
+    total: number;
+    count: number;
+  };
   total: {
     operations: number;
     volume: number;
-    commissions: number;
   };
 }
 
@@ -66,10 +69,10 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
           <div className="bg-slate-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <TrendingUp className="w-4 h-4 text-emerald-600" />
-              <p className="text-sm font-medium text-slate-700">Commissions</p>
+              <p className="text-sm font-medium text-slate-700">Commissions Saisies</p>
             </div>
-            <p className="text-2xl font-bold text-emerald-600">{formatNumber(data.total.commissions)}</p>
-            <p className="text-xs text-slate-500 mt-1">{currency}</p>
+            <p className="text-2xl font-bold text-emerald-600">{formatNumber(data.commissions.total)}</p>
+            <p className="text-xs text-slate-500 mt-1">{data.commissions.count} journées</p>
           </div>
 
           <div className="bg-slate-50 rounded-lg p-4">
@@ -79,7 +82,7 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
             </div>
             <p className="text-2xl font-bold text-slate-900">
               {data.total.volume > 0
-                ? ((data.total.commissions / data.total.volume) * 100).toFixed(2)
+                ? ((data.commissions.total / data.total.volume) * 100).toFixed(2)
                 : '0.00'}%
             </p>
             <p className="text-xs text-slate-500 mt-1">Marge moyenne</p>
@@ -96,7 +99,6 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-slate-900">{formatNumber(data.transactions.depots.volume)}</p>
-                <p className="text-xs text-emerald-600">Comm: {formatNumber(data.transactions.depots.commissions)}</p>
               </div>
             </div>
 
@@ -107,7 +109,6 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
               </div>
               <div className="text-right">
                 <p className="text-sm font-bold text-slate-900">{formatNumber(data.transactions.retraits.volume)}</p>
-                <p className="text-xs text-emerald-600">Comm: {formatNumber(data.transactions.retraits.commissions)}</p>
               </div>
             </div>
           </div>

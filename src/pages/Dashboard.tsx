@@ -21,7 +21,6 @@ interface DashboardStats {
   transactions_today: number;
   approvisionnements_today: number;
   change_operations_today: number;
-  commissions_today_usd: number;
   volume_today_usd: number;
   volume_today_cdf: number;
   services_actifs: number;
@@ -122,7 +121,6 @@ export function Dashboard() {
           transactions_today: 0,
           approvisionnements_today: 0,
           change_operations_today: 0,
-          commissions_today_usd: 0,
           volume_today_usd: 0,
           volume_today_cdf: 0,
           services_actifs: services.filter(s => s.actif).length,
@@ -281,7 +279,6 @@ export function Dashboard() {
               currency="USD"
               cashBalance={stats.cash_usd}
               virtualBalance={stats.virtual_usd}
-              commissions={stats.commissions_today_usd}
               totalGeneral={totalUSD}
             />
 
@@ -289,7 +286,6 @@ export function Dashboard() {
               currency="CDF"
               cashBalance={stats.cash_cdf}
               virtualBalance={stats.virtual_cdf}
-              commissions={0}
               totalGeneral={totalCDF}
             />
           </div>

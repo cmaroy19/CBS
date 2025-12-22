@@ -4,7 +4,6 @@ interface CurrencySectionProps {
   currency: 'USD' | 'CDF';
   cashBalance: number;
   virtualBalance: number;
-  commissions: number;
   totalGeneral: number;
 }
 
@@ -12,7 +11,6 @@ export function CurrencySection({
   currency,
   cashBalance,
   virtualBalance,
-  commissions,
   totalGeneral,
 }: CurrencySectionProps) {
   const isUSD = currency === 'USD';
@@ -33,7 +31,7 @@ export function CurrencySection({
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold text-white">{currency}</h2>
-            <p className="text-white/90 text-sm">Soldes et commissions</p>
+            <p className="text-white/90 text-sm">Soldes en temps réel</p>
           </div>
           <div className="p-3 bg-white/20 rounded-lg">
             <Icon className="w-8 h-8 text-white" />
@@ -62,20 +60,8 @@ export function CurrencySection({
                 {formatNumber(virtualBalance)}
               </p>
             </div>
-            <div className={`px-3 py-1 rounded-full text-sm font-medium ${isUSD ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${isUSD ? 'bg-amber-100 text-amber-700 ' : 'bg-slate-100 text-slate-700'}`}>
               Virtuel
-            </div>
-          </div>
-
-          <div className="flex justify-between items-center pb-3 border-b border-slate-200">
-            <div>
-              <p className="text-sm text-slate-600 mb-1">Commissions</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {formatNumber(commissions)}
-              </p>
-            </div>
-            <div className="px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
-              Commission
             </div>
           </div>
 

@@ -6,7 +6,7 @@ import { DateRangeFilter } from '../components/reports/DateRangeFilter';
 import { ReportFilters } from '../components/reports/ReportFilters';
 import { CurrencyReportSection } from '../components/reports/CurrencyReportSection';
 import { PrintableReport } from '../components/reports/PrintableReport';
-import type { Transaction, Approvisionnement, ChangeOperation } from '../types';
+import type { Transaction, Approvisionnement, ChangeOperation, CommissionJournaliere } from '../types';
 
 export function Rapports() {
   const services = useDataStore(state => state.services);
@@ -22,6 +22,7 @@ export function Rapports() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [approvisionnements, setApprovisionnements] = useState<Approvisionnement[]>([]);
   const [changeOperations, setChangeOperations] = useState<ChangeOperation[]>([]);
+  const [commissions, setCommissions] = useState<CommissionJournaliere[]>([]);
   const [loading, setLoading] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -69,14 +70,28 @@ export function Rapports() {
         .gte('created_at', startDate)
         .lte('created_at', endDate + 'T23:59:59');
 
-      const [approvisionnementsResult, changeResult] = await Promise.all([
+      let commissionsQuery = supabase
+        .from('commissions_journalieres')
+        .select('*')
+        .gte('date_cloture', startDate)
+        .lte('date_cloture', endDate);
+
+      if (selectedService) {
+        commissionsQuery = commissionsQuery.eq('service_id', selectedService);
+      } else {
+        commissionsQuery = commissionsQuery.is('service_id', null);
+      }
+
+      const [approvisionnementsResult, changeResult, commissionsResult] = await Promise.all([
         selectedOperationType === 'approvisionnement' || !selectedOperationType ? approvisionnementsQuery : Promise.resolve({ data: [] }),
         selectedOperationType === 'change' || !selectedOperationType ? changeQuery : Promise.resolve({ data: [] }),
+        commissionsQuery,
       ]);
 
       setTransactions(transactionsData || []);
       setApprovisionnements(approvisionnementsResult.data || []);
       setChangeOperations(changeResult.data || []);
+      setCommissions(commissionsResult.data || []);
     } catch (error) {
       console.error('Erreur lors du chargement des données:', error);
     } finally {
@@ -94,27 +109,27 @@ export function Rapports() {
 
     const depots = currencyTransactions.filter(t => t.type === 'depot');
     const retraits = currencyTransactions.filter(t => t.type === 'retrait');
-    const entrees = currencyApprovisionnements.filter(a => a.type === 'entree');
-    const sorties = currencyApprovisionnements.filter(a => a.type === 'sortie');
+    const entrees = currencyApprovisionnements.filter(a => a.operation === 'entree');
+    const sorties = currencyApprovisionnements.filter(a => a.operation === 'sortie');
 
     const depotsVolume = depots.reduce((sum, t) => sum + t.montant, 0);
-    const depotsCommissions = depots.reduce((sum, t) => sum + t.commission, 0);
     const retraitsVolume = retraits.reduce((sum, t) => sum + t.montant, 0);
-    const retraitsCommissions = retraits.reduce((sum, t) => sum + t.commission, 0);
     const entreesVolume = entrees.reduce((sum, a) => sum + a.montant, 0);
     const sortiesVolume = sorties.reduce((sum, a) => sum + a.montant, 0);
+
+    const totalCommissions = currency === 'USD'
+      ? commissions.reduce((sum, c) => sum + c.commission_usd, 0)
+      : commissions.reduce((sum, c) => sum + c.commission_cdf, 0);
 
     return {
       transactions: {
         depots: {
           count: depots.length,
           volume: depotsVolume,
-          commissions: depotsCommissions,
         },
         retraits: {
           count: retraits.length,
           volume: retraitsVolume,
-          commissions: retraitsCommissions,
         },
       },
       approvisionnements: {
@@ -127,10 +142,13 @@ export function Rapports() {
           volume: sortiesVolume,
         },
       },
+      commissions: {
+        total: totalCommissions,
+        count: commissions.length,
+      },
       total: {
         operations: currencyTransactions.length + currencyApprovisionnements.length,
         volume: depotsVolume + retraitsVolume + entreesVolume + sortiesVolume,
-        commissions: depotsCommissions + retraitsCommissions,
       },
     };
   };
