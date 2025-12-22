@@ -43,7 +43,7 @@ export function Transactions() {
 
       let transactionsQuery = supabase
         .from('v_all_transactions')
-        .select('*, service:services(*), creator:users!v_all_transactions_created_by_fkey(*)');
+        .select('*');
 
       let countQuery = supabase
         .from('v_all_transactions')
@@ -63,7 +63,7 @@ export function Transactions() {
           .lte('created_at', endOfDay);
       }
 
-      const [transactionsRes, countRes, servicesRes] = await Promise.all([
+      const [transactionsRes, countRes, servicesRes, usersRes] = await Promise.all([
         transactionsQuery
           .order('created_at', { ascending: false })
           .range(from, to),
@@ -75,10 +75,26 @@ export function Transactions() {
               .select('*')
               .eq('actif', true)
               .order('nom'),
+        supabase
+          .from('users')
+          .select('id, nom_complet'),
       ]);
 
       if (transactionsRes.data) {
-        setTransactions(transactionsRes.data as any);
+        const servicesMap = new Map(
+          (servicesRes.data || services).map(s => [s.id, s])
+        );
+        const usersMap = new Map(
+          (usersRes.data || []).map(u => [u.id, u])
+        );
+
+        const enrichedTransactions = transactionsRes.data.map((t: any) => ({
+          ...t,
+          service: t.service_id ? servicesMap.get(t.service_id) : null,
+          creator: t.created_by ? usersMap.get(t.created_by) : null,
+        }));
+
+        setTransactions(enrichedTransactions as any);
       }
 
       if (countRes.count !== null) {
