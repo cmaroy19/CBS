@@ -11,7 +11,7 @@ interface TransactionsTableProps {
 
 export function TransactionsTable({ transactions, loading = false, onCorrect }: TransactionsTableProps) {
   const { user } = useAuthStore();
-  const canCorrect = user?.role === 'Administrateur' || user?.role === 'Proprietaire';
+  const canCorrect = user?.role === 'administrateur' || user?.role === 'proprietaire';
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
