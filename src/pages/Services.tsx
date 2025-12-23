@@ -81,8 +81,6 @@ export function Services() {
           .update({
             nom: formData.nom,
             code: formData.code,
-            solde_virtuel_usd: formData.solde_virtuel_usd,
-            solde_virtuel_cdf: formData.solde_virtuel_cdf,
           })
           .eq('id', editingService.id);
 
@@ -96,8 +94,8 @@ export function Services() {
           .insert([{
             nom: formData.nom.trim(),
             code: formData.code.trim(),
-            solde_virtuel_usd: formData.solde_virtuel_usd,
-            solde_virtuel_cdf: formData.solde_virtuel_cdf,
+            solde_virtuel_usd: 0,
+            solde_virtuel_cdf: 0,
           }])
           .select()
           .single();
@@ -315,11 +313,8 @@ export function Services() {
                 type="number"
                 step="0.01"
                 value={formData.solde_virtuel_usd}
-                onChange={(e) =>
-                  setFormData({ ...formData, solde_virtuel_usd: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                required
+                readOnly
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
 
@@ -331,11 +326,8 @@ export function Services() {
                 type="number"
                 step="0.01"
                 value={formData.solde_virtuel_cdf}
-                onChange={(e) =>
-                  setFormData({ ...formData, solde_virtuel_cdf: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                required
+                readOnly
+                className="w-full px-4 py-2 border border-slate-300 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed"
               />
             </div>
           </div>
