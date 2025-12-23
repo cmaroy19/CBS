@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuthStore } from './stores/authStore';
+import { useAutoLogout } from './hooks/useAutoLogout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Layout } from './components/Layout';
 import { ToastContainer } from './components/ui/Toast';
@@ -20,6 +21,8 @@ function App() {
   const loading = useAuthStore(state => state.loading);
   const initialize = useAuthStore(state => state.initialize);
   const [currentPage, setCurrentPage] = useState('dashboard');
+
+  useAutoLogout();
 
   useEffect(() => {
     initialize();
