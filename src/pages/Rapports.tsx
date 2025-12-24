@@ -34,8 +34,9 @@ export function Rapports() {
     setLoading(true);
     try {
       let transactionsQuery = supabase
-        .from('transactions')
+        .from('v_all_transactions')
         .select('*')
+        .eq('annule', false)
         .gte('created_at', startDate)
         .lte('created_at', endDate + 'T23:59:59');
 
