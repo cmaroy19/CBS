@@ -25,35 +25,6 @@ export function TransactionCorrectionModal({
 
   if (!transaction) return null;
 
-  if (transaction.table_source === 'transaction_headers') {
-    return (
-      <Modal isOpen={isOpen} onClose={onClose} title="Correction non disponible" size="lg">
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start space-x-3">
-            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="text-sm font-semibold text-amber-900 mb-1">
-                Cette transaction ne peut pas être corrigée
-              </h4>
-              <p className="text-sm text-amber-800">
-                Les transactions de type paiement mixte ne peuvent pas être corrigées pour le moment.
-                Cette fonctionnalité sera disponible dans une prochaine version.
-              </p>
-            </div>
-          </div>
-          <div className="flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-lg transition-colors"
-            >
-              Fermer
-            </button>
-          </div>
-        </div>
-      </Modal>
-    );
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -64,21 +35,37 @@ export function TransactionCorrectionModal({
         throw new Error('Veuillez indiquer la raison de la correction');
       }
 
-      const { data, error: rpcError } = await supabase.rpc('creer_correction_transaction', {
-        p_transaction_id: transaction.id,
-        p_raison: raison.trim(),
-        p_user_id: user?.id,
-      });
+      const rpcFunction = transaction.table_source === 'transaction_headers'
+        ? 'creer_correction_transaction_mixte'
+        : 'creer_correction_transaction';
+
+      const params = transaction.table_source === 'transaction_headers'
+        ? {
+            p_header_id: transaction.id,
+            p_raison: raison.trim(),
+            p_user_id: user?.id,
+          }
+        : {
+            p_transaction_id: transaction.id,
+            p_raison: raison.trim(),
+            p_user_id: user?.id,
+          };
+
+      const { data, error: rpcError } = await supabase.rpc(rpcFunction, params);
 
       if (rpcError) throw rpcError;
 
+      const tableName = transaction.table_source === 'transaction_headers'
+        ? 'transaction_headers'
+        : 'transactions';
+
       await supabase.from('audit_logs').insert({
-        table_name: 'transactions',
+        table_name: tableName,
         operation: 'CORRECTION',
         record_id: transaction.id,
         new_data: {
           raison: raison,
-          correction_id: data.correction_id,
+          correction_id: data?.correction_id,
         },
         user_id: user?.id,
       });
@@ -207,15 +194,23 @@ export function TransactionCorrectionModal({
             <li className="flex items-start">
               <span className="text-emerald-600 mr-2">•</span>
               <span>
-                Création d'une transaction de{' '}
-                <strong>{transaction.type === 'depot' ? 'retrait' : 'dépôt'}</strong> de{' '}
-                <strong>
-                  {new Intl.NumberFormat('fr-FR', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  }).format(transaction.montant)}{' '}
-                  {transaction.devise}
-                </strong>
+                {transaction.table_source === 'transaction_headers' ? (
+                  <>
+                    Création d'une transaction inverse avec tous les débits et crédits inversés
+                  </>
+                ) : (
+                  <>
+                    Création d'une transaction de{' '}
+                    <strong>{transaction.type === 'depot' ? 'retrait' : 'dépôt'}</strong> de{' '}
+                    <strong>
+                      {new Intl.NumberFormat('fr-FR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      }).format(transaction.montant)}{' '}
+                      {transaction.devise}
+                    </strong>
+                  </>
+                )}
               </span>
             </li>
             <li className="flex items-start">
