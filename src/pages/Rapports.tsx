@@ -37,6 +37,7 @@ export function Rapports() {
         .from('v_all_transactions')
         .select('*')
         .eq('annule', false)
+        .is('transaction_origine_id', null)
         .gte('created_at', startDate)
         .lte('created_at', endDate + 'T23:59:59');
 
