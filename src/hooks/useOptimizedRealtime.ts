@@ -17,6 +17,20 @@ export function useOptimizedRealtime() {
       return;
     }
 
+    // Chargement initial des services
+    const loadInitialData = async () => {
+      const { data } = await supabase
+        .from('services')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (data) {
+        setServices(data);
+      }
+    };
+
+    loadInitialData();
+
     if (!globalChannel) {
       console.log('🔌 Initialisation canal Realtime (singleton)...');
 
