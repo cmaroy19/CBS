@@ -42,6 +42,10 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
         return 'bg-blue-100 text-blue-700';
       case 'paiement':
         return 'bg-amber-100 text-amber-700';
+      case 'transaction_mixte':
+        return 'bg-purple-100 text-purple-700';
+      case 'change':
+        return 'bg-indigo-100 text-indigo-700';
       default:
         return 'bg-slate-100 text-slate-700';
     }
@@ -53,6 +57,8 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
       retrait: 'Retrait',
       transfert: 'Transfert',
       paiement: 'Paiement',
+      transaction_mixte: 'Mixte',
+      change: 'Change',
     };
     return labels[type] || type;
   };
@@ -69,7 +75,7 @@ export function RecentTransactions({ transactions }: RecentTransactionsProps) {
               <h3 className="text-lg font-semibold text-slate-900">
                 Transactions Récentes
               </h3>
-              <p className="text-sm text-slate-500">10 dernières opérations</p>
+              <p className="text-sm text-slate-500">5 dernières opérations</p>
             </div>
           </div>
           <div className="text-sm text-slate-500">
