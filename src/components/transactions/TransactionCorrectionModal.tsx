@@ -25,6 +25,35 @@ export function TransactionCorrectionModal({
 
   if (!transaction) return null;
 
+  if (transaction.table_source === 'transaction_headers') {
+    return (
+      <Modal isOpen={isOpen} onClose={onClose} title="Correction non disponible" size="lg">
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start space-x-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-900 mb-1">
+                Cette transaction ne peut pas être corrigée
+              </h4>
+              <p className="text-sm text-amber-800">
+                Les transactions de type paiement mixte ne peuvent pas être corrigées pour le moment.
+                Cette fonctionnalité sera disponible dans une prochaine version.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-slate-500 hover:bg-slate-600 text-white rounded-lg transition-colors"
+            >
+              Fermer
+            </button>
+          </div>
+        </div>
+      </Modal>
+    );
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');

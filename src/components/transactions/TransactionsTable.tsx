@@ -116,6 +116,10 @@ export function TransactionsTable({ transactions, loading = false, onCorrect }: 
                       <AlertCircle className="w-4 h-4" />
                       <span className="text-xs">Correction</span>
                     </div>
+                  ) : transaction.table_source === 'transaction_headers' ? (
+                    <div className="flex items-center space-x-2 text-slate-400">
+                      <span className="text-xs">Non disponible</span>
+                    </div>
                   ) : (
                     <button
                       onClick={() => onCorrect?.(transaction)}

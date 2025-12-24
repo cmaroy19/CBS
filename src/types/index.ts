@@ -53,6 +53,7 @@ export interface Transaction {
   is_mixed?: boolean;
   taux_change?: number | null;
   description?: string | null;
+  table_source?: 'transactions' | 'transaction_headers';
   service?: Service;
   creator?: User;
 }
