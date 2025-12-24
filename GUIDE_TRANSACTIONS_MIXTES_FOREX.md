@@ -140,16 +140,74 @@ Même principe inversé : un client dépose 58 USD en donnant 50 USD + 17,600 CD
 - Il donne 540,000 CDF
 - Son compte virtuel est crédité de 200 USD
 
-### 7. Limitations et contrôles
+### 7. Système de correction
+
+#### Pourquoi corriger une transaction ?
+
+Des erreurs peuvent survenir :
+- Montant saisi incorrectement
+- Mauvais service sélectionné
+- Erreur de calcul dans la répartition USD/CDF
+- Transaction saisie en doublon
+
+#### Comment corriger
+
+**Accès** : Seuls les `administrateur` et `proprietaire` peuvent corriger des transactions.
+
+**Processus** :
+1. Dans la liste des transactions, cliquer sur "Corriger" pour la transaction concernée
+2. Saisir obligatoirement la raison de la correction
+3. Confirmer la correction
+
+**Ce qui se passe** :
+- Une transaction inverse est créée automatiquement
+- Tous les mouvements sont inversés (débit ↔ crédit)
+- Les soldes reviennent à leur état d'origine
+- La transaction originale est marquée comme "Annulée"
+- L'historique complet est conservé pour l'audit
+
+#### Exemple de correction
+
+**Transaction originale** :
+- Retrait de 58 USD (50 USD + 17,600 CDF)
+- Service : Illico Cash
+- Résultat : Solde virtuel Illico -58 USD, Cash USD +50 USD, Cash CDF +17,600 CDF
+
+**Transaction de correction** :
+- Dépôt de 58 USD (50 USD + 17,600 CDF)
+- Service : Illico Cash
+- Résultat : Annule complètement la transaction originale
+
+#### Traçabilité
+
+Chaque correction enregistre :
+- La raison de la correction
+- L'utilisateur qui a fait la correction
+- La date et l'heure
+- Le lien vers la transaction originale
+
+Ces informations sont accessibles dans l'historique des transactions et les logs d'audit.
+
+### 8. Limitations et contrôles
 
 - Un taux de change doit être actif pour créer une transaction mixte
 - Les montants doivent correspondre exactement (tolérance de 0.01)
 - Les soldes sont vérifiés en temps réel
 - Une transaction validée ne peut être annulée (seulement corrigée)
+- Une transaction ne peut être corrigée qu'une seule fois
+- Les corrections nécessitent une raison obligatoire
 
 ## Support
 
 Pour toute question ou problème :
 1. Vérifier que le taux de change est correctement configuré
 2. Consulter les logs d'audit en cas d'erreur
-3. Contacter l'administrateur système si nécessaire
+3. En cas d'erreur de saisie, utiliser le système de correction (administrateur uniquement)
+4. Consulter le document "SYSTEME_CORRECTION_TRANSACTIONS.md" pour plus de détails techniques
+5. Contacter l'administrateur système si nécessaire
+
+## Documents connexes
+
+- **SYSTEME_CORRECTION_TRANSACTIONS.md** : Documentation technique complète du système de correction
+- **TRANSACTION_CORRECTIONS.md** : Guide des corrections de transactions
+- **TRANSACTIONS_REFACTORING.md** : Architecture technique du système de transactions

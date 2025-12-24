@@ -90,14 +90,20 @@ Logique:
 
 **Trigger**: `trigger_update_balances_from_lines`
 **Table**: `transaction_lines`
+**Fonction**: `update_balances_from_transaction_lines()`
 
 Logique:
 - **DEBIT**: solde concerné ↓ (sortie)
 - **CREDIT**: solde concerné ↑ (entrée)
 
 Type de portefeuille:
-- **cash**: Met à jour `global_balances.cash_*`
-- **virtuel**: Met à jour `services.solde_virtuel_*`
+- **cash**: Met à jour `global_balances.cash_*` avec WHERE clause obligatoire
+- **virtuel**: Met à jour `services.solde_virtuel_*` avec WHERE service_id
+
+**Important**:
+- Le trigger vérifie que la transaction est `validee` avant de mettre à jour les soldes
+- La clause WHERE est obligatoire pour éviter l'erreur PostgreSQL "UPDATE requires a WHERE clause"
+- Les soldes sont récupérés et mis à jour de manière atomique dans la même transaction
 
 ## Interface utilisateur
 
@@ -146,6 +152,27 @@ Chaque correction crée une entrée dans `audit_logs`:
 1. Une transaction ne peut être corrigée qu'une seule fois
 2. Les corrections ne peuvent pas être annulées (nécessiterait une nouvelle correction)
 3. Les transactions en brouillon ne peuvent pas être corrigées (doivent être validées d'abord)
+
+## Corrections et améliorations récentes
+
+### Décembre 2024
+
+#### Fix: WHERE clause manquante dans le trigger
+**Migration**: `20251224165354_fix_trigger_add_where_clause_global_balances.sql`
+
+**Problème**:
+- Le trigger `update_balances_from_transaction_lines()` générait l'erreur "UPDATE requires a WHERE clause"
+- L'UPDATE sur `global_balances` n'avait pas de clause WHERE
+
+**Solution**:
+- Récupération de l'ID de `global_balances` avec le SELECT initial
+- Ajout de `WHERE id = v_global_balance_id` dans l'UPDATE
+- Garantit la conformité avec les règles PostgreSQL même si la table a une seule ligne
+
+**Impact**:
+- Les corrections de transactions mixtes fonctionnent correctement
+- Les soldes sont mis à jour atomiquement
+- Aucun impact sur les performances
 
 ## Améliorations futures possibles
 

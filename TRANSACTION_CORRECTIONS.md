@@ -26,6 +26,26 @@ Le système de correction permet aux utilisateurs autorisés (Administrateur et 
 
 ---
 
+## Types de Transactions Supportées
+
+Le système de correction prend en charge **deux types de transactions** :
+
+### 1. Transactions Simples
+- Table : `transactions`
+- Une seule ligne par transaction
+- Un seul service, une seule devise
+- Dépôt ou retrait simple
+
+### 2. Transactions Mixtes (Forex)
+- Tables : `transaction_headers` + `transaction_lines`
+- Plusieurs lignes par transaction
+- Paiement en plusieurs devises (USD + CDF)
+- Support du taux de change
+
+Les deux types utilisent le même mécanisme de correction avec traçabilité complète.
+
+---
+
 ## Architecture de la Solution
 
 ### Schéma de Base de Données
@@ -70,6 +90,36 @@ creer_correction_transaction(
 - Opération atomique (tout ou rien)
 - Garantit l'intégrité des données
 - Les soldes sont automatiquement recalculés par les triggers
+
+### Fonction Database : `creer_correction_transaction_mixte`
+
+**Signature :**
+```sql
+creer_correction_transaction_mixte(
+  p_header_id uuid,
+  p_raison text,
+  p_user_id uuid
+) RETURNS jsonb
+```
+
+**Fonctionnement :**
+
+1. **Validation** : Vérifie que la transaction header existe et n'est pas déjà annulée
+2. **Copie du header** :
+   - Crée un nouveau header avec statut `validee`
+   - Référence à la transaction originale
+   - Conserve le taux de change utilisé
+3. **Inversion des lignes** :
+   - Pour chaque ligne : `debit` ↔ `credit`
+   - Conserve montants, devises, types de portefeuille
+4. **Marquage** : Marque la transaction originale comme `statut = 'annulee'`
+5. **Mise à jour automatique** : Le trigger `update_balances_from_transaction_lines()` ajuste les soldes
+
+**Particularités pour transactions mixtes** :
+- Gère automatiquement les paiements multi-devises
+- Conserve le taux de change d'origine
+- Inverse tous les mouvements cash USD et CDF
+- Met à jour les soldes virtuels et cash globaux
 
 ---
 
@@ -206,6 +256,59 @@ L'utilisateur autorisé identifie une transaction erronée dans le tableau des t
    - Transaction annulée
    - Une seule transaction de dépôt reste valide
 
+### Exemple 4 : Transaction Mixte Forex Erronée
+
+**Transaction originale :**
+- Type : Retrait mixte (Forex)
+- Service : Illico Cash
+- Montant total : 58 USD
+- Payé en : 50 USD + 17,600 CDF (au taux 2200)
+- Erreur : Le montant devait être 48 USD au lieu de 58 USD
+
+**Écritures originales :**
+| Compte | Débit | Crédit | Devise |
+|--------|-------|--------|--------|
+| Service virtuel USD | 58 USD | - | USD |
+| Cash USD | - | 50 USD | USD |
+| Cash CDF | - | 17,600 CDF | CDF |
+
+**Correction :**
+1. Clic sur "Corriger"
+2. Raison : "Montant erroné - devait être 48 USD au lieu de 58 USD"
+3. Confirmation
+
+**Écritures de correction (inversées) :**
+| Compte | Débit | Crédit | Devise |
+|--------|-------|--------|--------|
+| Cash USD | 50 USD | - | USD |
+| Cash CDF | 17,600 CDF | - | CDF |
+| Service virtuel USD | - | 58 USD | USD |
+
+**Résultat** :
+   - Transaction originale marquée comme annulée
+   - Solde virtuel du service : revient à l'état initial
+   - Cash USD : revient à l'état initial
+   - Cash CDF : revient à l'état initial
+   - L'utilisateur peut créer une nouvelle transaction mixte de 48 USD
+
+### Exemple 5 : Dépôt Mixte Incorrect
+
+**Transaction originale :**
+- Type : Dépôt mixte (Forex)
+- Service : Orange Money
+- Montant total : 100 USD
+- Reçu : 80 USD + 54,000 CDF (au taux 2700)
+- Erreur : Le client a donné du CDF au mauvais taux
+
+**Correction :**
+1. Clic sur "Corriger"
+2. Raison : "Taux de change incorrect - transaction à refaire"
+3. Confirmation
+4. **Résultat** :
+   - Tous les mouvements sont inversés
+   - Le bon taux peut être configuré
+   - Une nouvelle transaction peut être créée
+
 ---
 
 ## Impact sur les Soldes
@@ -229,6 +332,26 @@ Les corrections impactent automatiquement les soldes virtuels grâce aux trigger
 - Le dépôt de correction augmente le cash global
 
 **Important :** Les soldes sont toujours cohérents car les triggers database garantissent l'atomicité des opérations.
+
+### Impact spécifique aux Transactions Mixtes
+
+Les transactions mixtes impactent **plusieurs soldes simultanément** :
+
+**Pour un retrait mixte annulé (correction = dépôt mixte) :**
+- Ligne 1 (virtuel) : Le crédit de correction diminue le solde virtuel du service
+- Ligne 2 (cash USD) : Le débit de correction augmente le cash USD global
+- Ligne 3 (cash CDF) : Le débit de correction augmente le cash CDF global
+
+**Pour un dépôt mixte annulé (correction = retrait mixte) :**
+- Ligne 1 (virtuel) : Le débit de correction augmente le solde virtuel du service
+- Ligne 2 (cash USD) : Le crédit de correction diminue le cash USD global
+- Ligne 3 (cash CDF) : Le crédit de correction diminue le cash CDF global
+
+**Garanties du système :**
+- Le trigger `update_balances_from_transaction_lines()` traite chaque ligne individuellement
+- Les soldes sont mis à jour avec clause WHERE obligatoire (conformité PostgreSQL)
+- L'opération est atomique : soit toutes les lignes sont traitées, soit aucune
+- Le statut `validee` est vérifié avant toute mise à jour de solde
 
 ---
 
@@ -347,11 +470,34 @@ Pour corriger avec un nouveau montant :
 
 ### Migrations
 
-1. **`20251222_add_transaction_corrections.sql`**
-   - Ajout des colonnes de correction
-   - Création des index
-   - Fonction `creer_correction_transaction`
+1. **`20251222081500_20251222_add_transaction_corrections.sql`**
+   - Ajout des colonnes de correction aux tables `transactions` et `transaction_headers`
+   - Création des index pour performance
+   - Fonction `creer_correction_transaction` pour transactions simples
+   - Fonction `creer_correction_transaction_mixte` pour transactions mixtes
    - Mise à jour des RLS policies
+
+2. **`20251224164432_fix_correction_add_source_field.sql`**
+   - Ajout du champ `source` aux colonnes de correction
+   - Permet de distinguer l'origine de la correction
+
+3. **`20251224164723_add_correction_to_transaction_headers.sql`**
+   - Extension du système de correction aux `transaction_headers`
+   - Support complet des transactions mixtes
+
+4. **`20251224164742_update_view_with_correction_columns.sql`**
+   - Mise à jour de `v_all_transactions` avec colonnes de correction
+   - Vue unifiée pour transactions simples et mixtes
+
+5. **`20251224164848_add_trigger_update_balances_transaction_lines.sql`**
+   - Trigger `update_balances_from_transaction_lines()` pour transactions mixtes
+   - Mise à jour automatique des soldes cash et virtuels
+   - Support des débits et crédits multiples
+
+6. **`20251224165354_fix_trigger_add_where_clause_global_balances.sql`**
+   - Correction critique : ajout de la clause WHERE manquante
+   - Conformité avec les règles PostgreSQL
+   - Évite l'erreur "UPDATE requires a WHERE clause"
 
 ---
 
@@ -379,6 +525,14 @@ Pour corriger avec un nouveau montant :
    - ✅ Logs créés correctement
    - ✅ Traçabilité complète
    - ✅ Liens entre transactions préservés
+
+5. **Test des transactions mixtes** :
+   - ✅ Correction d'un retrait mixte inverse correctement tous les mouvements
+   - ✅ Correction d'un dépôt mixte inverse correctement tous les mouvements
+   - ✅ Soldes cash USD et CDF reviennent à l'état initial
+   - ✅ Solde virtuel du service revient à l'état initial
+   - ✅ Le trigger respecte la clause WHERE pour global_balances
+   - ✅ Pas d'erreur "UPDATE requires a WHERE clause"
 
 ---
 
@@ -419,18 +573,106 @@ GROUP BY raison_correction
 ORDER BY occurrences DESC;
 ```
 
+**Lister toutes les transactions mixtes annulées :**
+```sql
+SELECT * FROM transaction_headers
+WHERE statut = 'annulee'
+ORDER BY corrigee_le DESC;
+```
+
+**Trouver les corrections d'une transaction mixte :**
+```sql
+SELECT * FROM transaction_headers
+WHERE transaction_origine_id = 'uuid-transaction';
+```
+
+**Voir les détails d'une transaction mixte avec ses lignes :**
+```sql
+SELECT
+  h.id,
+  h.statut,
+  h.transaction_origine_id,
+  l.sens,
+  l.montant,
+  l.devise,
+  l.type_portefeuille
+FROM transaction_headers h
+JOIN transaction_lines l ON l.header_id = h.id
+WHERE h.id = 'uuid-transaction'
+ORDER BY l.created_at;
+```
+
+**Statistiques des corrections par type de transaction :**
+```sql
+SELECT
+  'Simple' as type,
+  COUNT(*) as corrections
+FROM transactions
+WHERE annule = true
+UNION ALL
+SELECT
+  'Mixte' as type,
+  COUNT(*) as corrections
+FROM transaction_headers
+WHERE statut = 'annulee';
+```
+
 ---
 
 ## Conclusion
 
-Le système de correction des transactions fournit une solution sécurisée et traçable pour gérer les erreurs tout en préservant l'intégrité des données. L'approche par annulation et création de transaction inverse garantit que :
+Le système de correction des transactions fournit une solution complète, sécurisée et traçable pour gérer les erreurs dans tous les types de transactions tout en préservant l'intégrité des données.
 
+### Caractéristiques principales
+
+**Support complet :**
+- ✅ Transactions simples (dépôt/retrait standard)
+- ✅ Transactions mixtes (paiements multi-devises avec forex)
+- ✅ Gestion unifiée via la vue `v_all_transactions`
+
+**Sécurité et intégrité :**
 - ✅ Aucune donnée historique n'est perdue
-- ✅ Tous les changements sont tracés
-- ✅ Les soldes restent cohérents
+- ✅ Tous les changements sont tracés avec utilisateur, date et raison
+- ✅ Les soldes restent cohérents (cash USD, cash CDF, virtuels)
 - ✅ L'audit est complet et fiable
-- ✅ Les permissions sont respectées
+- ✅ Les permissions sont respectées (admin et propriétaire uniquement)
 
-**Date :** 2025-12-22
-**Version :** 1.0
-**Status :** ✅ Déployé et testé
+**Robustesse technique :**
+- ✅ Opérations atomiques garanties
+- ✅ Triggers avec clause WHERE conforme PostgreSQL
+- ✅ Validation des soldes avant et après correction
+- ✅ Gestion des erreurs complète
+
+**Traçabilité :**
+- ✅ Lien bidirectionnel entre transaction originale et correction
+- ✅ Raison obligatoire pour chaque correction
+- ✅ Logs d'audit automatiques
+- ✅ Historique complet accessible via requêtes SQL
+
+### Améliorations récentes (Décembre 2024)
+
+1. **Support des transactions mixtes**
+   - Extension du système aux `transaction_headers`
+   - Inversion automatique de toutes les lignes
+   - Conservation du taux de change d'origine
+
+2. **Correction du trigger**
+   - Ajout de la clause WHERE manquante pour `global_balances`
+   - Conformité stricte avec PostgreSQL
+   - Élimination de l'erreur "UPDATE requires a WHERE clause"
+
+3. **Vue unifiée**
+   - `v_all_transactions` combine simples et mixtes
+   - Colonnes de correction ajoutées
+   - Interface utilisateur cohérente
+
+### Documents connexes
+
+- **SYSTEME_CORRECTION_TRANSACTIONS.md** : Vue technique détaillée
+- **GUIDE_TRANSACTIONS_MIXTES_FOREX.md** : Guide utilisateur pour transactions mixtes
+- **TRANSACTIONS_REFACTORING.md** : Architecture du système de transactions
+
+**Date de création :** 2024-12-22
+**Dernière mise à jour :** 2024-12-24
+**Version :** 2.0
+**Status :** ✅ Déployé, testé et documenté
