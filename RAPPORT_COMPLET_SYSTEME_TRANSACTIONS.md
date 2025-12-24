@@ -1,348 +1,519 @@
-# Rapport Complet - Système de Transactions Mixtes et Corrections
+# Rapport Complet - Système de Transactions Simples et Mixtes
 
 **Date de création** : 24 décembre 2024
-**Version** : 2.0
+**Version** : 3.0 (Complète)
 **Statut** : Production
 
 ---
 
 ## Table des matières
 
-1. [Vue d'ensemble](#vue-densemble)
-2. [Architecture du système](#architecture-du-système)
-3. [Système de taux de change](#système-de-taux-de-change)
-4. [Transactions multi-lignes](#transactions-multi-lignes)
-5. [Transactions mixtes (Forex)](#transactions-mixtes-forex)
-6. [Système de correction](#système-de-correction)
-7. [Mise à jour des soldes](#mise-à-jour-des-soldes)
-8. [Sécurité et permissions](#sécurité-et-permissions)
-9. [Guide utilisateur](#guide-utilisateur)
-10. [Maintenance et requêtes](#maintenance-et-requêtes)
-11. [Historique des migrations](#historique-des-migrations)
+1. [Vue d'ensemble](#1-vue-densemble)
+2. [Architecture complète](#2-architecture-complète)
+3. [Système de taux de change](#3-système-de-taux-de-change)
+4. [Transactions simples](#4-transactions-simples)
+5. [Transactions mixtes (Forex)](#5-transactions-mixtes-forex)
+6. [Système de correction](#6-système-de-correction)
+7. [Vue unifiée](#7-vue-unifiée)
+8. [Interface utilisateur](#8-interface-utilisateur)
+9. [Flux de données](#9-flux-de-données)
+10. [Sécurité et permissions](#10-sécurité-et-permissions)
+11. [Guide utilisateur complet](#11-guide-utilisateur-complet)
+12. [Maintenance et diagnostic](#12-maintenance-et-diagnostic)
 
 ---
 
 ## 1. Vue d'ensemble
 
-### Objectif
+### 1.1 Objectif du système
 
-Le système permet de gérer des transactions financières complexes impliquant plusieurs devises (USD et CDF) avec des paiements mixtes, tout en maintenant une comptabilité en partie double rigoureuse et une traçabilité complète.
+Le système de gestion des transactions permet de traiter deux types d'opérations financières :
 
-### Fonctionnalités principales
+1. **Transactions simples** : Dépôts et retraits dans une seule devise (USD ou CDF)
+2. **Transactions mixtes** : Paiements combinés USD + CDF avec conversion automatique
 
-- **Taux de change configurables** : Système de gestion des taux USD/CDF avec historique
-- **Transactions simples** : Dépôts et retraits standard (une seule devise)
-- **Transactions mixtes** : Paiements combinés USD + CDF avec conversion automatique
-- **Système de correction** : Annulation et correction de toutes les transactions avec traçabilité
-- **Comptabilité en partie double** : Équilibre automatique débits = crédits
-- **Mise à jour automatique des soldes** : Triggers database pour cohérence garantie
+Le système garantit :
+- La cohérence comptable (débits = crédits)
+- La traçabilité complète de toutes les opérations
+- La mise à jour automatique des soldes
+- La possibilité de corriger toute transaction avec audit complet
 
-### Types de transactions supportés
+### 1.2 Types de transactions supportés
 
-| Type | Description | Tables utilisées |
-|------|-------------|------------------|
-| **Simple** | Dépôt ou retrait dans une seule devise | `transactions` |
-| **Mixte** | Paiement USD + CDF avec taux de change | `transaction_headers` + `transaction_lines` |
+| Type | Table(s) | Description | Exemple |
+|------|----------|-------------|---------|
+| **Transaction simple** | `transactions` | Opération dans une seule devise | Retrait de 100 USD en espèces USD |
+| **Transaction mixte** | `transaction_headers` + `transaction_lines` | Paiement combiné avec conversion | Retrait de 58 USD payé en 50 USD + 17,600 CDF |
+
+### 1.3 Fonctionnalités clés
+
+- Configuration flexible des taux de change USD/CDF
+- Calcul automatique des montants en CDF
+- Validation des montants avec tolérance de 0.01
+- Génération automatique de références uniques
+- Correction de toutes les transactions avec traçabilité
+- Vue unifiée des transactions simples et mixtes
+- Interface utilisateur intuitive avec deux onglets
 
 ---
 
-## 2. Architecture du système
+## 2. Architecture complète
 
-### Schéma de base de données
+### 2.1 Schéma de la base de données
 
 ```
-┌─────────────────────┐
-│  exchange_rates     │  ← Configuration des taux de change
-├─────────────────────┤
-│ - devise_source     │
-│ - devise_destination│
-│ - taux             │
-│ - actif            │
-└─────────────────────┘
-         │
-         ↓ (utilisé par)
-┌─────────────────────┐     ┌─────────────────────┐
-│ transaction_headers │────→│ transaction_lines   │
-├─────────────────────┤     ├─────────────────────┤
-│ - reference         │     │ - header_id         │
-│ - type_operation    │     │ - type_portefeuille │
-│ - montant_total     │     │ - service_id        │
-│ - taux_change       │     │ - devise            │
-│ - statut            │     │ - sens (debit/credit)│
-│ - transaction_      │     │ - montant           │
-│   origine_id        │     └─────────────────────┘
-└─────────────────────┘              │
-         │                           │
-         └───────────────────────────┼─────→ UPDATE
-                                     │
-                            ┌────────┴──────────┐
-                            │                   │
-                    ┌───────▼────────┐  ┌──────▼────────┐
-                    │ services       │  │global_balances│
-                    ├────────────────┤  ├───────────────┤
-                    │solde_virtuel_* │  │ cash_usd      │
-                    └────────────────┘  │ cash_cdf      │
-                                        └───────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                    TAUX DE CHANGE                          │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │ exchange_rates  │
+                   ├─────────────────┤
+                   │ devise_source   │
+                   │ devise_destination │
+                   │ taux            │
+                   │ actif           │
+                   └─────────────────┘
+                            │
+                            │ (utilisé par)
+                            ↓
+┌─────────────────────────────────────────────────────────────┐
+│              TRANSACTIONS SIMPLES (Anciennes)              │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │  transactions   │
+                   ├─────────────────┤
+                   │ type            │
+                   │ service_id      │
+                   │ montant         │
+                   │ devise          │
+                   │ annule          │
+                   │ transaction_    │
+                   │   origine_id    │
+                   └─────────────────┘
+                            │
+                            │ (met à jour)
+                            ↓
+                   ┌─────────────────┐
+                   │ services        │
+                   │ global_balances │
+                   └─────────────────┘
 
-Ancienne table (toujours utilisée pour transactions simples):
-┌─────────────────────┐
-│   transactions      │
-├─────────────────────┤
-│ - type (depot/retrait)
-│ - service_id        │
-│ - montant           │
-│ - devise            │
-│ - annule            │
-│ - transaction_      │
-│   origine_id        │
-└─────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│           TRANSACTIONS MIXTES (Nouvelles)                  │
+└─────────────────────────────────────────────────────────────┘
+                            │
+            ┌───────────────┴───────────────┐
+            │                               │
+   ┌────────▼────────┐          ┌──────────▼──────────┐
+   │transaction_     │─────────→│ transaction_lines   │
+   │   headers       │          ├─────────────────────┤
+   ├─────────────────┤          │ header_id           │
+   │ reference       │          │ type_portefeuille   │
+   │ type_operation  │          │ service_id          │
+   │ montant_total   │          │ devise              │
+   │ taux_change     │          │ sens (debit/credit) │
+   │ statut          │          │ montant             │
+   │ transaction_    │          └─────────────────────┘
+   │   origine_id    │                     │
+   │ raison_correction│                    │
+   └─────────────────┘                     │
+            │                              │
+            │ (correction)                 │ (met à jour via trigger)
+            │                              │
+            └──────────────┬───────────────┘
+                          ↓
+                ┌─────────────────────┐
+                │   services          │
+                │   global_balances   │
+                ├─────────────────────┤
+                │ solde_virtuel_usd   │
+                │ solde_virtuel_cdf   │
+                │ cash_usd            │
+                │ cash_cdf            │
+                └─────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                    VUE UNIFIÉE                             │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                   ┌────────▼────────┐
+                   │v_all_transactions│
+                   ├─────────────────┤
+                   │ UNION de:       │
+                   │ - transactions  │
+                   │ - transaction_  │
+                   │   headers       │
+                   └─────────────────┘
+                            │
+                            ↓
+                   [Interface utilisateur]
 ```
 
-### Principes de conception
+### 2.2 Tables principales
 
-1. **Immutabilité** : Les transactions validées ne sont jamais modifiées
-2. **Traçabilité** : Tout changement est enregistré avec utilisateur, date et raison
-3. **Atomicité** : Les opérations multi-étapes sont garanties (tout ou rien)
-4. **Cohérence** : Les triggers garantissent l'équilibre et la justesse des soldes
-5. **Sécurité** : RLS policies strictes par rôle utilisateur
+#### Table `exchange_rates`
+Stocke les taux de change configurables.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid | Identifiant unique |
+| devise_source | text | USD ou CDF |
+| devise_destination | text | USD ou CDF |
+| taux | numeric | Taux (ex: 2700 = 1 USD = 2700 CDF) |
+| actif | boolean | Un seul actif par paire |
+| date_debut | timestamptz | Date de début de validité |
+| date_fin | timestamptz | Date de fin (optionnel) |
+| notes | text | Commentaires |
+
+#### Table `transactions` (transactions simples)
+Anciennes transactions avec un seul mouvement.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid | Identifiant unique |
+| reference | text | Référence unique auto-générée |
+| type | text | depot ou retrait |
+| service_id | uuid | Service concerné |
+| montant | numeric | Montant |
+| devise | text | USD ou CDF |
+| info_client | text | Informations client |
+| notes | text | Notes |
+| annule | boolean | Si corrigée |
+| transaction_origine_id | uuid | Lien vers original si correction |
+| raison_correction | text | Raison de la correction |
+| corrigee_par | uuid | Utilisateur correcteur |
+| corrigee_le | timestamptz | Date de correction |
+
+#### Table `transaction_headers` (en-têtes des transactions mixtes)
+En-tête des transactions multi-lignes.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid | Identifiant unique |
+| reference | text | Référence unique (TRX-YYYYMM-XXXX) |
+| type_operation | text | depot, retrait, approvisionnement, change, transfert |
+| devise_reference | text | Devise de référence (USD) |
+| montant_total | numeric | Montant total |
+| description | text | Description générée automatiquement |
+| info_client | text | Informations client |
+| taux_change | numeric | Taux figé |
+| paire_devises | text | Ex: USD/CDF |
+| statut | text | brouillon, validee, annulee |
+| transaction_origine_id | uuid | Pour corrections |
+| raison_correction | text | Raison de correction |
+| corrigee_par | uuid | Utilisateur correcteur |
+| corrigee_le | timestamptz | Date de correction |
+
+#### Table `transaction_lines` (lignes des transactions mixtes)
+Lignes équilibrées de chaque transaction.
+
+| Colonne | Type | Description |
+|---------|------|-------------|
+| id | uuid | Identifiant unique |
+| header_id | uuid | Lien vers transaction_headers |
+| ligne_numero | integer | Numéro de ligne |
+| type_portefeuille | text | cash ou virtuel |
+| service_id | uuid | Service (pour virtuel) |
+| devise | text | USD ou CDF |
+| sens | text | debit (sortie) ou credit (entrée) |
+| montant | numeric | Montant de la ligne |
+| description | text | Description de la ligne |
 
 ---
 
 ## 3. Système de taux de change
 
-### Table `exchange_rates`
+### 3.1 Configuration des taux
 
-Stocke tous les taux de change configurés avec leur période de validité.
+Les taux de change sont configurables via l'interface "Taux de change" (accessible dans le menu).
 
-#### Colonnes principales
+**Caractéristiques** :
+- Un seul taux actif par paire à la fois
+- Historique complet des taux passés
+- Période de validité configurable
+- Notes pour documentation
 
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `devise_source` | text | Devise source (USD, CDF) |
-| `devise_destination` | text | Devise destination (USD, CDF) |
-| `taux` | numeric | Taux de change (ex: 2700 = 1 USD = 2700 CDF) |
-| `actif` | boolean | Si ce taux est actif (un seul actif par paire) |
-| `date_debut` | timestamptz | Date de début de validité |
-| `date_fin` | timestamptz | Date de fin de validité (optionnel) |
+**Trigger automatique** : Lorsqu'un nouveau taux est activé, l'ancien est automatiquement désactivé.
 
-#### Contraintes
+### 3.2 Fonction `get_active_exchange_rate()`
 
-- Un seul taux actif par paire de devises à la fois
-- Le taux doit être positif
-- Les devises source et destination doivent être différentes
-- `date_fin` doit être supérieure à `date_debut` si définie
-
-#### Fonction clé : `get_active_exchange_rate()`
+Récupère le taux actif pour une paire de devises.
 
 ```sql
 SELECT get_active_exchange_rate('USD', 'CDF');
--- Retourne: 2700 (ou NULL si aucun taux actif)
+-- Retourne: 2700 (ou NULL)
 ```
 
-Cette fonction :
-1. Cherche un taux actif pour la paire demandée
-2. Si non trouvé, cherche l'inverse et retourne `1/taux`
-3. Vérifie les dates de validité
+**Logique** :
+1. Cherche un taux actif pour USD → CDF
+2. Si non trouvé, cherche CDF → USD et retourne 1/taux
+3. Vérifie que la date est dans la période de validité
 
-#### Trigger de gestion
+### 3.3 Permissions
 
-Le trigger `trigger_ensure_single_active_rate` désactive automatiquement les anciens taux lorsqu'un nouveau taux est activé pour la même paire.
-
-### Permissions
-
-- **Lecture** : Tous les utilisateurs authentifiés
-- **Création/Modification** : Gérants, Propriétaires, Administrateurs uniquement
+| Rôle | Lecture | Création | Modification |
+|------|---------|----------|--------------|
+| Tous | Oui | Non | Non |
+| Gérant | Oui | Oui | Oui |
+| Propriétaire | Oui | Oui | Oui |
+| Administrateur | Oui | Oui | Oui |
 
 ---
 
-## 4. Transactions multi-lignes
+## 4. Transactions simples
 
-### Table `transaction_headers`
+### 4.1 Principe
 
-Contient les informations globales de chaque transaction composée.
+Les transactions simples sont les opérations de base : dépôt ou retrait dans **une seule devise**.
 
-#### Colonnes principales
+**Exemples** :
+- Dépôt de 100 USD (client apporte 100 USD en cash)
+- Retrait de 50,000 CDF (client retire 50,000 CDF en cash)
 
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `reference` | text | Référence unique (TRX-YYYYMM-XXXX) |
-| `type_operation` | text | depot, retrait, approvisionnement, change, transfert |
-| `devise_reference` | text | Devise de référence (USD, CDF) |
-| `montant_total` | numeric | Montant total de la transaction |
-| `taux_change` | numeric | Taux figé au moment de la transaction |
-| `paire_devises` | text | Paire utilisée (ex: "USD/CDF") |
-| `statut` | text | brouillon, validee, annulee |
-| `transaction_origine_id` | uuid | Pour les corrections : lien vers l'original |
-| `raison_correction` | text | Raison de la correction |
-| `corrigee_par` | uuid | Utilisateur ayant fait la correction |
-| `corrigee_le` | timestamptz | Date de la correction |
+### 4.2 Table utilisée
 
-### Table `transaction_lines`
+`transactions`
 
-Contient les lignes de transaction équilibrées (débits = crédits).
+### 4.3 Impact sur les soldes
 
-#### Colonnes principales
+**Pour un DEPOT** :
+- `global_balances.cash_{devise}` **diminue** (l'argent sort de la caisse)
+- `services.solde_virtuel_{devise}` **augmente** (le crédit du service augmente)
 
-| Colonne | Type | Description |
-|---------|------|-------------|
-| `header_id` | uuid | Lien vers transaction_headers |
-| `ligne_numero` | integer | Numéro de ligne dans la transaction |
-| `type_portefeuille` | text | cash (caisse globale) ou virtuel (service) |
-| `service_id` | uuid | ID du service (pour type_portefeuille = virtuel) |
-| `devise` | text | USD ou CDF |
-| `sens` | text | debit (sortie) ou credit (entrée) |
-| `montant` | numeric | Montant de la ligne |
-| `description` | text | Description de la ligne |
+**Pour un RETRAIT** :
+- `global_balances.cash_{devise}` **augmente** (l'argent entre dans la caisse)
+- `services.solde_virtuel_{devise}` **diminue** (le crédit du service diminue)
 
-### Principes comptables
+### 4.4 Trigger de mise à jour
 
-Chaque transaction doit respecter la **partie double** :
-```
-Σ(débits) = Σ(crédits)
-```
+`trigger_update_soldes_on_transaction`
 
-La fonction `validate_transaction_balance()` vérifie cet équilibre avant validation.
-
-### Génération automatique de référence
-
-La fonction `generate_transaction_reference()` génère des références uniques :
-- Format : `TRX-YYYYMM-XXXX`
-- Exemple : `TRX-202412-0001`
-- Incrémentation automatique par mois
+Ce trigger met à jour automatiquement les soldes après chaque insertion dans `transactions`.
 
 ---
 
 ## 5. Transactions mixtes (Forex)
 
-### Concept
+### 5.1 Principe
 
-Une transaction mixte permet de payer ou recevoir un montant en USD en utilisant une combinaison de USD et CDF, avec conversion au taux de change actif.
+Une transaction mixte permet de payer ou recevoir un montant en USD en utilisant une **combinaison de USD et CDF**, avec conversion automatique au taux de change actif.
 
-### Exemple : Retrait de 58 USD
+### 5.2 Cas d'usage typiques
 
-**Scénario** : Un client veut retirer 58 USD, mais vous n'avez que 50 USD en caisse.
+#### Scénario 1 : Retrait mixte
+
+**Situation** : Un client veut retirer 58 USD de son compte Illico Cash, mais la caisse n'a que 50 USD disponibles.
 
 **Solution** : Paiement mixte
-- Montant total : 58 USD
-- Payé en USD : 50 USD
-- Payé en CDF : 17,600 CDF (équivalent à 8 USD au taux de 2200)
+- Montant total : **58 USD**
+- Payé en USD : **50 USD**
+- Payé en CDF : **17,600 CDF** (équivalent à 8 USD au taux de 2200)
+
+#### Scénario 2 : Dépôt mixte
+
+**Situation** : Un client veut déposer 100 USD, mais n'a que 80 USD en espèces. Il complète avec des CDF.
+
+**Solution** : Dépôt mixte
+- Montant total : **100 USD**
+- Reçu en USD : **80 USD**
+- Reçu en CDF : **54,000 CDF** (équivalent à 20 USD au taux de 2700)
+
+### 5.3 Architecture des transactions mixtes
+
+#### Comptabilité en partie double
+
+Chaque transaction mixte crée plusieurs **lignes équilibrées** :
+
+```
+Σ(débits) = Σ(crédits)
+```
+
+#### Exemple détaillé : Retrait de 58 USD (50 USD + 17,600 CDF)
 
 **Écritures comptables créées** :
 
-| Ligne | Type | Service/Cash | Devise | Sens | Montant | Description |
-|-------|------|--------------|--------|------|---------|-------------|
-| 1 | virtuel | Illico Cash | USD | débit | 58 USD | Débit service virtuel |
-| 2 | cash | Global | USD | crédit | 50 USD | Crédit cash USD |
-| 3 | cash | Global | CDF | crédit | 17,600 CDF | Crédit cash CDF |
+| Ligne | Type portefeuille | Service | Devise | Sens | Montant | Description |
+|-------|-------------------|---------|--------|------|---------|-------------|
+| 1 | virtuel | Illico Cash | USD | **débit** | 58 USD | Débit service virtuel |
+| 2 | cash | Global | USD | **crédit** | 50 USD | Crédit cash USD |
+| 3 | cash | Global | CDF | **crédit** | 17,600 CDF | Crédit cash CDF |
 
-**Vérification** :
+**Vérification de l'équilibre** :
 - Débits = 58 USD
-- Crédits = 50 USD + (17,600 CDF / 2200) = 50 USD + 8 USD = 58 USD ✓
+- Crédits = 50 USD + (17,600 / 2200) = 50 + 8 = 58 USD ✓
 
-### Fonctions principales
+**Impact sur les soldes** :
+- `services.solde_virtuel_usd` (Illico Cash) : **-58 USD**
+- `global_balances.cash_usd` : **+50 USD**
+- `global_balances.cash_cdf` : **+17,600 CDF**
 
-#### `create_transaction_mixte_retrait()`
+### 5.4 Fonctions backend
+
+#### Fonction `create_transaction_mixte_retrait()`
 
 Crée une transaction de retrait avec paiement mixte.
 
-**Paramètres** :
-- `p_service_id` : Service concerné
-- `p_montant_total_usd` : Montant total du retrait
-- `p_montant_paye_usd` : Partie payée en USD
-- `p_montant_paye_cdf` : Partie payée en CDF
-- `p_info_client` : Informations client
-- `p_created_by` : Utilisateur créant la transaction
+**Signature** :
+```sql
+create_transaction_mixte_retrait(
+  p_service_id uuid,
+  p_montant_total_usd numeric,
+  p_montant_paye_usd numeric,
+  p_montant_paye_cdf numeric,
+  p_info_client text DEFAULT NULL,
+  p_notes text DEFAULT NULL,
+  p_created_by uuid DEFAULT NULL
+)
+RETURNS uuid  -- ID du transaction_header créé
+```
 
-**Validations** :
-1. Solde virtuel du service suffisant
-2. Cash USD suffisant
-3. Cash CDF suffisant
-4. Taux de change actif disponible
-5. Montant CDF correspond au montant USD restant × taux
+**Validations effectuées** :
+1. Montant total > 0
+2. Montants USD et CDF >= 0
+3. Au moins un montant > 0
+4. Solde virtuel du service suffisant
+5. Cash USD suffisant
+6. Cash CDF suffisant
+7. Taux de change actif disponible
+8. **Validation du montant CDF** : `|montant_cdf_attendu - montant_cdf_fourni| <= 0.01`
 
 **Actions** :
-1. Crée le `transaction_header`
-2. Crée les lignes équilibrées
-3. Valide la transaction
-4. Met à jour les soldes (via trigger)
+1. Récupère le taux de change actif
+2. Vérifie la correspondance des montants
+3. Crée le `transaction_header` avec statut 'brouillon'
+4. Crée les lignes :
+   - Ligne 1 : Débit du service virtuel USD
+   - Ligne 2 : Crédit cash USD (si montant > 0)
+   - Ligne 3 : Crédit cash CDF (si montant > 0)
+5. Valide la transaction (statut → 'validee')
+6. Les soldes sont mis à jour par le trigger `update_balances_from_transaction_lines()`
 
-#### `create_transaction_mixte_depot()`
+#### Fonction `create_transaction_mixte_depot()`
 
 Même principe pour les dépôts, avec sens inversé.
 
-### Impact sur les soldes
+**Paramètres** :
+- `p_montant_recu_usd` : Montant reçu en USD
+- `p_montant_recu_cdf` : Montant reçu en CDF
 
-**Pour un retrait mixte de 58 USD (50 USD + 17,600 CDF)** :
-- Solde virtuel du service : **-58 USD**
-- Cash USD global : **+50 USD**
-- Cash CDF global : **+17,600 CDF**
+**Lignes créées** :
+1. Débit cash USD (si montant > 0)
+2. Débit cash CDF (si montant > 0)
+3. Crédit du service virtuel USD
 
-**Pour un dépôt mixte de 58 USD (50 USD + 17,600 CDF)** :
-- Solde virtuel du service : **+58 USD**
-- Cash USD global : **-50 USD**
-- Cash CDF global : **-17,600 CDF**
+### 5.5 Trigger de mise à jour des soldes
+
+#### Fonction `update_balances_from_transaction_lines()`
+
+Trigger sur `transaction_lines` AFTER INSERT.
+
+**Logique** :
+1. Vérifie que le header est `validee`
+2. Calcule le delta selon le sens :
+   - `debit` → delta = **-montant** (sortie)
+   - `credit` → delta = **+montant** (entrée)
+3. Met à jour selon le type de portefeuille :
+   - `cash` → met à jour `global_balances.cash_{devise}`
+   - `virtuel` → met à jour `services.solde_virtuel_{devise}`
+
+**Correction du 24 décembre 2024** : Ajout de la clause WHERE obligatoire pour l'UPDATE sur `global_balances`.
+
+```sql
+UPDATE global_balances
+SET cash_usd = cash_usd + v_delta
+WHERE id = v_global_balance_id;  -- WHERE clause OBLIGATOIRE
+```
+
+### 5.6 Génération de la référence
+
+Chaque transaction mixte reçoit une référence unique au format :
+
+```
+TRX-YYYYMM-XXXX
+```
+
+**Exemple** : `TRX-202412-0023`
+
+**Génération** : Fonction `generate_transaction_reference()` appelée automatiquement par un trigger BEFORE INSERT.
 
 ---
 
 ## 6. Système de correction
 
-### Principe général
+### 6.1 Principe général
 
-Le système permet d'annuler n'importe quelle transaction (simple ou mixte) en créant une **transaction inverse** qui ramène les soldes à leur état initial.
+Le système permet de **corriger** toute transaction (simple ou mixte) en créant une **transaction inverse**.
 
-**Important** :
-- La transaction originale n'est jamais supprimée
+**Règles** :
+- La transaction originale n'est jamais modifiée
 - Une transaction de correction inverse tous les mouvements
-- La traçabilité complète est conservée
+- Traçabilité complète : utilisateur, date, raison
+- Seuls les Administrateurs et Propriétaires peuvent créer des corrections
 
-### Pour transactions simples
+### 6.2 Correction de transactions simples
 
-#### Table concernée : `transactions`
+#### Fonction utilisée
 
-Fonction utilisée : `creer_correction_transaction()`
+`creer_correction_transaction(p_transaction_id, p_raison, p_user_id)`
 
-**Processus** :
-1. Vérifie que la transaction existe et n'est pas déjà annulée
-2. Crée une transaction inverse (dépôt → retrait ou retrait → dépôt)
-3. Marque la transaction originale `annule = true`
-4. Enregistre l'utilisateur, la date et la raison
-5. Les soldes sont ajustés par le trigger existant
+#### Processus
 
-**Exemple** :
+1. Récupère la transaction originale
+2. Vérifie qu'elle n'est pas déjà annulée
+3. Crée une transaction inverse :
+   - `depot` → `retrait`
+   - `retrait` → `depot`
+4. Même montant, même service, même devise
+5. Marque l'original `annule = true`
+6. Enregistre l'utilisateur, la date et la raison
+7. Les soldes sont ajustés par le trigger existant
 
-Transaction originale :
+#### Exemple
+
+**Transaction originale** :
 ```
-- Type: RETRAIT
-- Service: Illico Cash
-- Montant: 100 USD
-```
-
-Transaction de correction :
-```
-- Type: DEPOT
-- Service: Illico Cash
-- Montant: 100 USD
-- transaction_origine_id: uuid-de-l'original
-- raison_correction: "Montant erroné"
+Type: RETRAIT
+Service: Illico Cash
+Montant: 100 USD
 ```
 
-### Pour transactions mixtes
+**Transaction de correction** :
+```
+Type: DEPOT
+Service: Illico Cash
+Montant: 100 USD
+transaction_origine_id: uuid-de-l'original
+raison_correction: "Montant erroné"
+```
 
-#### Tables concernées : `transaction_headers` + `transaction_lines`
+**Résultat** : Les soldes reviennent à leur état d'origine.
 
-Fonction utilisée : `creer_correction_transaction_mixte()`
+### 6.3 Correction de transactions mixtes
 
-**Processus** :
-1. Vérifie que la transaction header existe et n'est pas annulée
-2. Copie le header avec statut `validee`
-3. **Inverse toutes les lignes** : débit ↔ crédit
-4. Conserve montants, devises, taux de change
-5. Marque l'original `statut = 'annulee'`
-6. Les soldes sont ajustés par le trigger `update_balances_from_transaction_lines()`
+#### Fonction utilisée
 
-**Exemple** :
+`creer_correction_transaction_mixte(p_header_id, p_raison, p_user_id)`
 
-Transaction originale (retrait mixte 58 USD) :
+#### Processus
+
+1. Récupère le header original
+2. Vérifie qu'il n'est pas déjà annulé
+3. Crée un nouveau header avec :
+   - `statut = 'validee'`
+   - `transaction_origine_id` = ID de l'original
+   - `raison_correction` = raison fournie
+4. Copie toutes les lignes en **inversant les sens** :
+   - `debit` → `credit`
+   - `credit` → `debit`
+5. Conserve les montants, devises, services identiques
+6. Marque l'original `statut = 'annulee'`
+7. Les soldes sont ajustés par le trigger
+
+#### Exemple
+
+**Transaction originale** (retrait mixte 58 USD) :
 
 | Ligne | Type | Devise | Sens | Montant |
 |-------|------|--------|------|---------|
@@ -350,7 +521,7 @@ Transaction originale (retrait mixte 58 USD) :
 | 2 | cash | USD | crédit | 50 USD |
 | 3 | cash | CDF | crédit | 17,600 CDF |
 
-Transaction de correction (inverse) :
+**Transaction de correction** :
 
 | Ligne | Type | Devise | Sens | Montant |
 |-------|------|--------|------|---------|
@@ -360,460 +531,507 @@ Transaction de correction (inverse) :
 
 **Résultat** : Tous les soldes reviennent à leur état d'origine.
 
-### Colonnes de traçabilité
-
-Ajoutées aux deux tables (`transactions` et `transaction_headers`) :
+### 6.4 Colonnes de traçabilité
 
 | Colonne | Description |
 |---------|-------------|
-| `transaction_origine_id` | UUID de la transaction originale (si correction) |
-| `raison_correction` | Raison obligatoire saisie par l'utilisateur |
-| `corrigee_par` | ID de l'utilisateur ayant fait la correction |
+| `transaction_origine_id` | UUID de la transaction originale |
+| `raison_correction` | Raison obligatoire de la correction |
+| `corrigee_par` | ID de l'utilisateur correcteur |
 | `corrigee_le` | Date et heure de la correction |
 
-Pour `transactions` : champ supplémentaire `annule` (boolean)
-Pour `transaction_headers` : utilise le champ `statut` = 'annulee'
-
-### Permissions
-
-**Seuls** les rôles **Administrateur** et **Proprietaire** peuvent créer des corrections.
-
-### Limitations
-
-1. Une transaction ne peut être corrigée qu'**une seule fois**
-2. Les corrections ne peuvent pas être annulées (nécessiterait une nouvelle correction)
-3. Les transactions en brouillon ne peuvent pas être corrigées
+**Pour `transactions`** : Champ `annule` (boolean) supplémentaire
+**Pour `transaction_headers`** : Champ `statut` = 'annulee'
 
 ---
 
-## 7. Mise à jour des soldes
+## 7. Vue unifiée
 
-### Pour transactions simples
+### 7.1 Vue `v_all_transactions`
 
-**Trigger** : `trigger_update_soldes_on_transaction`
-**Table** : `transactions`
+Cette vue combine les transactions simples et mixtes en une seule vue pour l'affichage.
 
-**Logique** :
-- **DEPOT** : `cash_global ↑` et `solde_virtuel_service ↓`
-- **RETRAIT** : `cash_global ↓` et `solde_virtuel_service ↑`
-
-Ce trigger existe depuis le début du système.
-
-### Pour transactions mixtes
-
-**Trigger** : `trigger_update_balances_from_lines`
-**Table** : `transaction_lines`
-**Fonction** : `update_balances_from_transaction_lines()`
-
-**Logique** :
-- **DEBIT** : solde concerné **↓** (sortie)
-- **CREDIT** : solde concerné **↑** (entrée)
-
-**Type de portefeuille** :
-- **cash** : Met à jour `global_balances.cash_usd` ou `cash_cdf`
-- **virtuel** : Met à jour `services.solde_virtuel_usd` ou `solde_virtuel_cdf`
-
-#### Détails de la fonction
-
+**Structure** :
 ```sql
-CREATE OR REPLACE FUNCTION update_balances_from_transaction_lines()
-RETURNS TRIGGER AS $$
-DECLARE
-  v_header_statut text;
-  v_delta numeric;
-  v_global_balance_id uuid;
-BEGIN
-  -- 1. Vérifier que la transaction est validée
-  SELECT statut INTO v_header_statut
-  FROM transaction_headers
-  WHERE id = NEW.header_id;
-
-  IF v_header_statut != 'validee' THEN
-    RETURN NEW;  -- Ne rien faire si pas validée
-  END IF;
-
-  -- 2. Calculer le delta
-  IF NEW.sens = 'debit' THEN
-    v_delta := -NEW.montant;  -- Sortie
-  ELSE
-    v_delta := NEW.montant;   -- Entrée
-  END IF;
-
-  -- 3. Mettre à jour le solde approprié
-  IF NEW.type_portefeuille = 'cash' THEN
-    -- Récupérer l'ID de global_balances
-    SELECT id INTO v_global_balance_id
-    FROM global_balances LIMIT 1;
-
-    -- Mettre à jour avec WHERE clause (OBLIGATOIRE)
-    UPDATE global_balances
-    SET cash_usd = cash_usd + v_delta  -- ou cash_cdf selon devise
-    WHERE id = v_global_balance_id;
-
-  ELSIF NEW.type_portefeuille = 'virtuel' THEN
-    -- Mettre à jour le service
-    UPDATE services
-    SET solde_virtuel_usd = solde_virtuel_usd + v_delta  -- ou cdf
-    WHERE id = NEW.service_id;
-  END IF;
-
-  RETURN NEW;
-END;
-$$;
+SELECT * FROM v_all_transactions
+-- Retourne TOUTES les transactions (simples + mixtes)
 ```
 
-#### Correction critique du 24 décembre 2024
+**Colonnes communes** :
+- `id`, `reference`, `type`, `service_id`
+- `montant`, `devise`, `info_client`, `notes`
+- `created_by`, `created_at`
+- `is_mixed` : boolean pour distinguer les transactions mixtes
+- `taux_change` : taux utilisé (pour les mixtes)
+- `annule` / `statut`
+- Colonnes de correction
 
-**Problème** : L'UPDATE sur `global_balances` manquait une clause WHERE.
+**Source des données** :
+- **Partie 1** : `transactions` (WHERE annule = false)
+- **Partie 2** : `transaction_headers` (WHERE statut = 'validee')
 
-**Erreur** : "UPDATE requires a WHERE clause"
+**UNION ALL** : Les deux ensembles sont combinés.
 
-**Solution** :
-1. Récupérer l'ID de `global_balances` avec le SELECT initial
-2. Utiliser `WHERE id = v_global_balance_id` dans l'UPDATE
-3. Garantit la conformité PostgreSQL même si la table a une seule ligne
+### 7.2 Avantages
 
-**Migration** : `20251224165354_fix_trigger_add_where_clause_global_balances.sql`
-
-### Garanties
-
-- **Atomicité** : Soit toutes les lignes sont traitées, soit aucune
-- **Cohérence** : Les soldes sont toujours équilibrés
-- **Validation** : Le statut `validee` est vérifié avant mise à jour
-- **Performance** : Les triggers s'exécutent en temps constant
+- Une seule requête pour afficher toutes les transactions
+- Interface unifiée dans l'application
+- Filtrage et recherche simplifiés
+- Historique complet en un seul endroit
 
 ---
 
-## 8. Sécurité et permissions
+## 8. Interface utilisateur
 
-### Row Level Security (RLS)
+### 8.1 Page Transactions
 
-Toutes les tables ont RLS activé :
-```sql
-ALTER TABLE transaction_headers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transaction_lines ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE exchange_rates ENABLE ROW LEVEL SECURITY;
+**Chemin** : `/transactions`
+
+**Composants** :
+- `Transactions.tsx` : Page principale
+- `TransactionsForm.tsx` : Formulaire pour transactions simples
+- `TransactionMixteForm.tsx` : Formulaire pour transactions mixtes
+- `TransactionsTable.tsx` : Tableau d'affichage
+- `TransactionCorrectionModal.tsx` : Modal de correction
+
+### 8.2 Onglets de saisie
+
+Lorsqu'on clique sur "Nouvelle transaction", un modal s'ouvre avec **deux onglets** :
+
+#### Onglet 1 : Transaction simple
+
+**Champs** :
+- Type (Dépôt / Retrait)
+- Service
+- Montant
+- Devise (USD / CDF)
+- Info client (optionnel)
+- Notes (optionnel)
+
+**Soumission** : Insère directement dans la table `transactions`
+
+#### Onglet 2 : Paiement mixte (Forex)
+
+**Champs** :
+- Type (Dépôt / Retrait)
+- Service
+- **Montant total (USD)** : montant à payer/recevoir
+- **Montant en USD** : partie en USD
+- **Montant en CDF** : partie en CDF (calculé automatiquement)
+- Info client (optionnel)
+- Notes (optionnel)
+
+**Calcul automatique** :
+- Checkbox "Calcul auto" activée par défaut
+- Lorsque l'utilisateur saisit le montant USD, le montant CDF est calculé automatiquement :
+  ```
+  montant_cdf = (montant_total - montant_usd) × taux_change
+  ```
+
+**Affichage du taux actif** :
+```
+Taux actif: 1 USD = 2,700 CDF
 ```
 
-### Policies par table
+**Récapitulatif** :
+```
+Montant USD:        50.00 USD
+Reste à convertir:   8.00 USD
+Équivalent CDF:  17,600.00 CDF
+─────────────────────────────
+Total:              58.00 USD
+```
+
+**Soumission** : Appelle la fonction `create_transaction_mixte_retrait()` ou `create_transaction_mixte_depot()`
+
+### 8.3 Affichage des transactions
+
+**Table** : Affiche toutes les transactions (simples + mixtes)
+
+**Colonnes** :
+- Date/Heure
+- Référence
+- Type
+- Service
+- Montant
+- Devise
+- Badge "Mixte" (pour les transactions mixtes)
+- Info client
+- Créé par
+- Statut
+- Actions (Corriger)
+
+**Filtres** :
+- Date : Sélecteur de date (affiche les transactions du jour par défaut)
+- Recherche : Par référence
+
+**Pagination** : 20 transactions par page
+
+### 8.4 Badge de distinction
+
+Les transactions mixtes affichent un badge spécial :
+
+```
+[Mixte] 50 USD + 17,600 CDF
+```
+
+### 8.5 Correction
+
+**Bouton** : "Corriger" sur chaque ligne (visible uniquement pour Administrateur/Propriétaire)
+
+**Modal de correction** :
+1. Affiche les détails de la transaction
+2. Demande une raison obligatoire
+3. Affiche un aperçu de l'opération
+4. Bouton "Confirmer la correction"
+
+**Après validation** :
+- La transaction originale est marquée "Annulée"
+- Une transaction de correction est créée
+- Les soldes sont rétablis
+- La liste est rafraîchie
+
+---
+
+## 9. Flux de données
+
+### 9.1 Flux pour transaction simple
+
+```
+┌──────────────────┐
+│ Utilisateur      │
+│ Saisit formulaire│
+└────────┬─────────┘
+         │
+         ↓
+┌────────────────────────────┐
+│ INSERT INTO transactions   │
+└────────┬───────────────────┘
+         │
+         ↓
+┌──────────────────────────────────────┐
+│ TRIGGER: update_soldes_on_transaction│
+└────────┬─────────────────────────────┘
+         │
+         ├──→ UPDATE global_balances
+         └──→ UPDATE services
+                    │
+                    ↓
+            Soldes mis à jour
+```
+
+### 9.2 Flux pour transaction mixte
+
+```
+┌──────────────────────────┐
+│ Utilisateur              │
+│ Saisit formulaire mixte  │
+└────────┬─────────────────┘
+         │
+         ↓
+┌────────────────────────────────────────┐
+│ get_active_exchange_rate('USD', 'CDF') │
+└────────┬───────────────────────────────┘
+         │
+         ↓ (taux = 2700)
+┌────────────────────────────────────────┐
+│ Validation côté client:                │
+│ montant_cdf = reste_usd × taux         │
+└────────┬───────────────────────────────┘
+         │
+         ↓
+┌────────────────────────────────────────┐
+│ RPC: create_transaction_mixte_retrait()│
+│ ou create_transaction_mixte_depot()    │
+└────────┬───────────────────────────────┘
+         │
+         ├──→ INSERT transaction_headers (statut = brouillon)
+         │
+         ├──→ INSERT transaction_lines (ligne 1: debit virtuel)
+         │    ↓ TRIGGER: update_balances_from_transaction_lines()
+         │      (ne fait rien car statut != validee)
+         │
+         ├──→ INSERT transaction_lines (ligne 2: credit cash USD)
+         │    ↓ TRIGGER: (ne fait rien car statut != validee)
+         │
+         ├──→ INSERT transaction_lines (ligne 3: credit cash CDF)
+         │    ↓ TRIGGER: (ne fait rien car statut != validee)
+         │
+         ├──→ valider_transaction(header_id, user_id)
+         │    ↓ UPDATE transaction_headers SET statut = 'validee'
+         │
+         ├──→ MAINTENANT les triggers se déclenchent rétroactivement
+         │
+         ├──→ UPDATE services.solde_virtuel_usd
+         ├──→ UPDATE global_balances.cash_usd
+         └──→ UPDATE global_balances.cash_cdf
+                    │
+                    ↓
+            Soldes mis à jour
+```
+
+### 9.3 Flux de correction
+
+```
+┌──────────────────────────┐
+│ Utilisateur clique       │
+│ "Corriger"               │
+└────────┬─────────────────┘
+         │
+         ↓
+┌────────────────────────────────────┐
+│ Modal de confirmation              │
+│ + saisie de la raison              │
+└────────┬───────────────────────────┘
+         │
+         ↓
+┌────────────────────────────────────────────┐
+│ creer_correction_transaction()             │
+│ ou creer_correction_transaction_mixte()    │
+└────────┬───────────────────────────────────┘
+         │
+         ├──→ Création transaction inverse
+         │    (tous les sens sont inversés)
+         │
+         ├──→ Marquage original comme annulée
+         │
+         └──→ Les triggers mettent à jour les soldes
+                    │
+                    ↓
+            Soldes rétablis à l'état d'origine
+```
+
+---
+
+## 10. Sécurité et permissions
+
+### 10.1 Row Level Security (RLS)
+
+Toutes les tables ont RLS activé.
+
+### 10.2 Permissions par table
 
 #### `exchange_rates`
 
-| Opération | Permission |
-|-----------|------------|
-| SELECT | Tous les utilisateurs authentifiés |
-| INSERT | Gérant, Propriétaire, Administrateur |
-| UPDATE | Gérant, Propriétaire, Administrateur |
-| DELETE | Non autorisé |
+| Rôle | SELECT | INSERT | UPDATE | DELETE |
+|------|--------|--------|--------|--------|
+| Caissier | Oui | Non | Non | Non |
+| Gérant | Oui | Oui | Oui | Non |
+| Propriétaire | Oui | Oui | Oui | Non |
+| Administrateur | Oui | Oui | Oui | Non |
+
+#### `transactions`
+
+| Rôle | SELECT | INSERT | UPDATE | DELETE |
+|------|--------|--------|--------|--------|
+| Tous | Oui | Non | Non | Non |
+| Caissier | Oui | Oui | Créateur uniquement | Non |
+| Gérant | Oui | Oui | Créateur uniquement | Non |
+| Propriétaire | Oui | Oui | Oui | Non |
+| Administrateur | Oui | Oui | Oui | Non |
 
 #### `transaction_headers` et `transaction_lines`
 
-| Opération | Permission |
-|-----------|------------|
-| SELECT | Tous les utilisateurs authentifiés |
-| INSERT | Utilisateurs authentifiés actifs |
-| UPDATE | Créateur uniquement, si statut = 'brouillon' |
-| DELETE | Créateur uniquement, si statut = 'brouillon' |
+| Rôle | SELECT | INSERT | UPDATE | DELETE |
+|------|--------|--------|--------|--------|
+| Tous | Oui | Non | Non | Non |
+| Utilisateur actif | Oui | Oui | Si brouillon + créateur | Si brouillon + créateur |
+| Gérant | Oui | Oui | Oui | Non |
+| Propriétaire | Oui | Oui | Oui | Non |
+| Administrateur | Oui | Oui | Oui | Non |
 
-#### `transactions` (table simple)
+### 10.3 Fonctions SECURITY DEFINER
 
-| Opération | Permission |
-|-----------|------------|
-| SELECT | Tous les utilisateurs authentifiés |
-| INSERT | Caissier, Gérant, Propriétaire, Administrateur |
-| UPDATE | Créateur uniquement |
-| DELETE | Non autorisé |
-
-### Fonctions SECURITY DEFINER
-
-Les fonctions suivantes s'exécutent avec les privilèges du créateur :
+Les fonctions suivantes s'exécutent avec les privilèges du propriétaire de la base :
 - `create_transaction_mixte_retrait()`
 - `create_transaction_mixte_depot()`
 - `creer_correction_transaction()`
 - `creer_correction_transaction_mixte()`
 
-Cela permet de contourner les RLS policies tout en maintenant la sécurité via validation interne.
+Cela permet de contourner les RLS tout en maintenant la sécurité via validations internes.
 
-### Audit
+### 10.4 Corrections
 
-Toutes les opérations critiques sont enregistrées dans `audit_logs` :
-- Création de transaction
-- Validation de transaction
-- Correction de transaction
-- Modification de taux de change
+**Seuls** les rôles **Administrateur** et **Proprietaire** peuvent créer des corrections.
+
+Vérification dans l'interface :
+```typescript
+const canCorrect = user?.role === 'administrateur' || user?.role === 'proprietaire';
+```
 
 ---
 
-## 9. Guide utilisateur
+## 11. Guide utilisateur complet
 
-### 9.1 Configurer un taux de change
+### 11.1 Configurer un taux de change
 
 **Accès** : Menu "Taux de change"
-**Permissions** : Gérant, Propriétaire, Administrateur
 
 **Étapes** :
 1. Cliquer sur "Nouveau taux"
-2. Saisir les informations :
-   - Devise source : USD
-   - Devise destination : CDF
-   - Taux : 2700 (1 USD = 2700 CDF)
-   - Cocher "Actif"
-   - Date de début : aujourd'hui
-   - Date de fin : laisser vide (illimité)
-3. Sauvegarder
+2. Sélectionner :
+   - Devise source : **USD**
+   - Devise destination : **CDF**
+3. Saisir le taux : **2700** (signifie 1 USD = 2700 CDF)
+4. Cocher "Taux actif"
+5. Date de début : **aujourd'hui** (ou date spécifique)
+6. Date de fin : laisser vide (illimité) ou définir une date
+7. Notes : optionnel (ex: "Taux du marché officiel")
+8. Cliquer "Créer"
 
-**Note** : L'ancien taux actif sera automatiquement désactivé.
+**Résultat** : L'ancien taux actif est automatiquement désactivé.
 
-### 9.2 Créer une transaction mixte
+### 11.2 Créer une transaction simple
 
-**Accès** : Menu "Transactions" > "Nouvelle transaction" > Onglet "Paiement mixte"
+**Accès** : Menu "Transactions" > "Nouvelle transaction" > Onglet "Transaction simple"
 
-#### Exemple : Retrait de 58 USD
+**Exemple : Retrait de 100 USD**
 
-**Situation** : Le client veut 58 USD, mais vous n'avez que 50 USD en caisse.
+1. Type : **Retrait**
+2. Service : **Illico Cash**
+3. Montant : **100**
+4. Devise : **USD**
+5. Info client : "Jean Dupont - 0812345678" (optionnel)
+6. Notes : optionnel
+7. Cliquer "Créer la transaction"
 
-**Étapes** :
-1. Sélectionner le service (ex: Illico Cash)
-2. Sélectionner "Retrait"
-3. Montant total : **58** USD
-4. Montant USD : **50** USD
-5. Le système calcule automatiquement : **17,600** CDF (pour 8 USD au taux 2200)
-6. Vérifier les soldes affichés
-7. Saisir l'info client (nom, téléphone)
-8. Cliquer "Valider"
+**Impact** :
+- Solde virtuel Illico Cash : **+100 USD** (le client retire donc son crédit augmente)
+- Cash global USD : **-100 USD** (l'argent sort de la caisse)
 
-**Résultat** :
-- Une référence unique est générée (ex: TRX-202412-0023)
-- Le solde virtuel du service diminue de 58 USD
-- Le cash USD augmente de 50 USD
-- Le cash CDF augmente de 17,600 CDF
+### 11.3 Créer une transaction mixte
 
-#### Exemple : Dépôt de 100 USD
+**Accès** : Menu "Transactions" > "Nouvelle transaction" > Onglet "Paiement mixte (Forex)"
 
-**Situation** : Le client dépose 100 USD en donnant 80 USD + 54,000 CDF.
+#### Exemple 1 : Retrait de 58 USD avec paiement mixte
 
-**Étapes** :
-1. Sélectionner le service
-2. Sélectionner "Dépôt"
-3. Montant total : **100** USD
-4. Montant USD reçu : **80** USD
-5. Montant CDF reçu : **54,000** CDF (pour 20 USD au taux 2700)
-6. Valider
-
-**Résultat** :
-- Le solde virtuel du service augmente de 100 USD
-- Le cash USD diminue de 80 USD
-- Le cash CDF diminue de 54,000 CDF
-
-### 9.3 Corriger une transaction
-
-**Accès** : Menu "Transactions" > Bouton "Corriger" sur la ligne concernée
-**Permissions** : Administrateur, Propriétaire uniquement
-
-**Cas d'usage** :
-- Montant saisi incorrectement
-- Mauvais service sélectionné
-- Transaction en doublon
-- Erreur de calcul
+**Contexte** : Le client veut 58 USD, mais vous n'avez que 50 USD en caisse.
 
 **Étapes** :
-1. Identifier la transaction erronée dans la liste
+1. Type : **Retrait**
+2. Service : **Illico Cash**
+3. Montant total (USD) : **58**
+4. Montant en USD : **50**
+5. Le système calcule automatiquement : **Montant en CDF : 17,600** (pour 8 USD au taux 2200)
+
+**Récapitulatif affiché** :
+```
+Taux actif: 1 USD = 2,200 CDF
+
+Montant USD:        50.00 USD
+Reste à convertir:   8.00 USD
+Équivalent CDF:  17,600.00 CDF
+─────────────────────────────
+Total:              58.00 USD
+```
+
+6. Info client : "Marie Kambale - 0899887766"
+7. Notes : optionnel
+8. Cliquer "Créer la transaction"
+
+**Impact** :
+- Solde virtuel Illico Cash : **-58 USD**
+- Cash global USD : **+50 USD**
+- Cash global CDF : **+17,600 CDF**
+
+**Référence générée** : `TRX-202412-0023`
+
+#### Exemple 2 : Dépôt de 100 USD avec paiement mixte
+
+**Contexte** : Le client veut déposer 100 USD mais n'a que 80 USD en espèces. Il complète avec 54,000 CDF.
+
+**Étapes** :
+1. Type : **Dépôt**
+2. Service : **Airtel Money**
+3. Montant total (USD) : **100**
+4. Montant en USD : **80**
+5. Le système calcule automatiquement : **Montant en CDF : 54,000** (pour 20 USD au taux 2700)
+6. Cliquer "Créer la transaction"
+
+**Impact** :
+- Solde virtuel Airtel Money : **+100 USD**
+- Cash global USD : **-80 USD**
+- Cash global CDF : **-54,000 CDF**
+
+### 11.4 Corriger une transaction
+
+**Accès** : Menu "Transactions" > Bouton "Corriger" sur la ligne
+
+**Permissions** : Administrateur ou Propriétaire uniquement
+
+#### Correction d'une transaction simple
+
+**Exemple** : Vous avez saisi 100 USD au lieu de 90 USD
+
+**Étapes** :
+1. Trouver la transaction dans la liste
 2. Cliquer sur "Corriger" dans la colonne Actions
-3. **Saisir obligatoirement la raison** de la correction
-   - Exemple : "Montant erroné - devait être 48 USD au lieu de 58 USD"
-4. Vérifier l'aperçu de l'action
-5. Cliquer "Confirmer la correction"
+3. Une modal s'ouvre avec les détails
+4. Saisir la raison : **"Montant erroné - devait être 90 USD"**
+5. Vérifier l'aperçu de l'opération
+6. Cliquer "Confirmer la correction"
 
-**Ce qui se passe** :
-- Une transaction inverse est créée automatiquement
-- Tous les mouvements sont inversés (débit ↔ crédit)
-- La transaction originale est marquée comme "Annulée"
-- Les soldes reviennent à leur état d'origine
-- L'historique complet est conservé
+**Résultat** :
+- Transaction originale marquée "Annulée"
+- Transaction de correction créée (retrait → dépôt ou dépôt → retrait)
+- Soldes rétablis
+- Vous pouvez maintenant créer la bonne transaction (90 USD)
 
-**Traçabilité** :
-- Utilisateur qui a fait la correction
-- Date et heure
-- Raison de la correction
-- Lien vers la transaction originale
+#### Correction d'une transaction mixte
 
-### 9.4 États des transactions
+**Exemple** : Vous avez créé une transaction mixte par erreur
 
-Dans la liste des transactions, vous pouvez voir :
+**Étapes** :
+1. Cliquer sur "Corriger" sur la transaction mixte
+2. Saisir la raison : **"Transaction en doublon"**
+3. Cliquer "Confirmer la correction"
+
+**Résultat** :
+- Transaction originale : `statut = 'annulee'`
+- Nouvelle transaction de correction créée avec toutes les lignes inversées :
+  - débit → crédit
+  - crédit → débit
+- Tous les soldes (virtuel USD, cash USD, cash CDF) reviennent à leur état d'origine
+
+### 11.5 Consulter l'historique
+
+**Accès** : Menu "Transactions"
+
+**Filtres disponibles** :
+- **Date** : Affiche les transactions d'un jour spécifique
+- **Recherche** : Par référence (ex: "TRX-202412-0023")
+
+**Badges de statut** :
 
 | Badge | Signification |
 |-------|---------------|
-| **Validée** | Transaction normale, active |
-| **Annulée** | Transaction corrigée, les soldes ont été rétablis |
-| **Correction** | Transaction créée pour corriger une autre |
-| **Brouillon** | Transaction non encore validée (transactions mixtes uniquement) |
+| Validée | Transaction normale, active |
+| Annulée | Transaction corrigée |
+| Mixte | Transaction avec paiement USD + CDF |
+| Correction | Transaction créée pour corriger une autre |
 
-### 9.5 Consulter l'historique
-
-**Vue unifiée** : `v_all_transactions`
-
-Cette vue combine :
-- Transactions simples (`transactions`)
-- Transactions mixtes (`transaction_headers`)
-
-Toutes les colonnes importantes sont présentes :
+**Détails affichés** :
+- Date et heure
 - Référence
-- Type d'opération
-- Montant
-- Devise
+- Type (Dépôt / Retrait)
 - Service
-- Statut/Annulé
-- Transaction origine (si correction)
-- Raison de correction
-- Corrigée par/le
+- Montant total
+- Devise
+- Badge "Mixte" (si applicable)
+- Info client
+- Créé par
+- Statut
 
 ---
 
-## 10. Maintenance et requêtes
+## 12. Maintenance et diagnostic
 
-### 10.1 Requêtes utiles pour transactions simples
+### 12.1 Vérifier les soldes
 
-**Lister toutes les transactions annulées** :
+#### Comparer les soldes calculés vs enregistrés
+
 ```sql
-SELECT *
-FROM transactions
-WHERE annule = true
-ORDER BY corrigee_le DESC;
-```
-
-**Trouver les corrections d'une transaction** :
-```sql
-SELECT *
-FROM transactions
-WHERE transaction_origine_id = 'uuid-de-la-transaction'
-```
-
-**Statistiques des corrections par utilisateur** :
-```sql
-SELECT
-  u.nom_complet,
-  COUNT(*) as nombre_corrections
-FROM transactions t
-JOIN users u ON t.corrigee_par = u.id
-WHERE t.annule = true
-GROUP BY u.nom_complet
-ORDER BY nombre_corrections DESC;
-```
-
-### 10.2 Requêtes pour transactions mixtes
-
-**Lister toutes les transactions mixtes annulées** :
-```sql
-SELECT *
-FROM transaction_headers
-WHERE statut = 'annulee'
-ORDER BY corrigee_le DESC;
-```
-
-**Voir les détails d'une transaction mixte avec ses lignes** :
-```sql
-SELECT
-  h.reference,
-  h.type_operation,
-  h.montant_total,
-  h.taux_change,
-  h.statut,
-  l.ligne_numero,
-  l.type_portefeuille,
-  l.devise,
-  l.sens,
-  l.montant,
-  l.description
-FROM transaction_headers h
-JOIN transaction_lines l ON l.header_id = h.id
-WHERE h.id = 'uuid-de-la-transaction'
-ORDER BY l.ligne_numero;
-```
-
-**Vérifier l'équilibre d'une transaction** :
-```sql
-SELECT
-  header_id,
-  SUM(CASE WHEN sens = 'debit' THEN montant ELSE 0 END) as total_debit,
-  SUM(CASE WHEN sens = 'credit' THEN montant ELSE 0 END) as total_credit,
-  SUM(CASE WHEN sens = 'debit' THEN montant ELSE -montant END) as difference
-FROM transaction_lines
-WHERE header_id = 'uuid-de-la-transaction'
-GROUP BY header_id;
--- difference doit être 0
-```
-
-### 10.3 Statistiques globales
-
-**Transactions par type** :
-```sql
-SELECT
-  'Simple' as type_transaction,
-  COUNT(*) as total,
-  SUM(CASE WHEN annule THEN 1 ELSE 0 END) as annulees
-FROM transactions
-UNION ALL
-SELECT
-  'Mixte' as type_transaction,
-  COUNT(*) as total,
-  SUM(CASE WHEN statut = 'annulee' THEN 1 ELSE 0 END) as annulees
-FROM transaction_headers;
-```
-
-**Volume de transactions mixtes par mois** :
-```sql
-SELECT
-  TO_CHAR(created_at, 'YYYY-MM') as mois,
-  COUNT(*) as nombre_transactions,
-  SUM(montant_total) as volume_total_usd
-FROM transaction_headers
-WHERE devise_reference = 'USD'
-  AND statut = 'validee'
-GROUP BY TO_CHAR(created_at, 'YYYY-MM')
-ORDER BY mois DESC;
-```
-
-**Raisons de correction les plus fréquentes** :
-```sql
-(
-  SELECT raison_correction, COUNT(*) as occurrences
-  FROM transactions
-  WHERE transaction_origine_id IS NOT NULL
-  GROUP BY raison_correction
-)
-UNION ALL
-(
-  SELECT raison_correction, COUNT(*) as occurrences
-  FROM transaction_headers
-  WHERE transaction_origine_id IS NOT NULL
-  GROUP BY raison_correction
-)
-ORDER BY occurrences DESC;
-```
-
-### 10.4 Contrôles d'intégrité
-
-**Vérifier que tous les headers ont des lignes équilibrées** :
-```sql
-SELECT
-  h.id,
-  h.reference,
-  h.statut,
-  SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE 0 END) as debits,
-  SUM(CASE WHEN l.sens = 'credit' THEN l.montant ELSE 0 END) as credits,
-  SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END) as diff
-FROM transaction_headers h
-LEFT JOIN transaction_lines l ON l.header_id = h.id
-WHERE h.statut = 'validee'
-GROUP BY h.id, h.reference, h.statut
-HAVING ABS(SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END)) > 0.01;
--- Ne doit retourner aucune ligne
-```
-
-**Vérifier les soldes calculés** :
-```sql
--- Calculer le solde théorique basé sur les transactions
+-- Pour les transactions simples
 WITH solde_calcule AS (
   SELECT
     service_id,
@@ -833,202 +1051,137 @@ SELECT
 FROM services s
 LEFT JOIN solde_calcule sc ON sc.service_id = s.id
 WHERE ABS(s.solde_virtuel_usd - COALESCE(sc.solde_virtuel_calcule_usd, 0)) > 0.01;
--- Ne doit retourner aucune ligne si tout est cohérent
+-- Ne doit retourner aucune ligne
 ```
 
-### 10.5 Nettoyage et optimisation
+#### Vérifier l'équilibre des transactions mixtes
 
-**Supprimer les transactions en brouillon de plus de 7 jours** :
 ```sql
-DELETE FROM transaction_headers
-WHERE statut = 'brouillon'
-  AND created_at < now() - INTERVAL '7 days';
-```
-
-**Analyser les performances** :
-```sql
--- Index utilisés
 SELECT
-  schemaname,
-  tablename,
-  indexname,
-  idx_scan as nombre_utilisations,
-  idx_tup_read as lignes_lues,
-  idx_tup_fetch as lignes_retournees
-FROM pg_stat_user_indexes
-WHERE schemaname = 'public'
-  AND tablename IN ('transaction_headers', 'transaction_lines', 'transactions')
-ORDER BY idx_scan DESC;
+  h.reference,
+  SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE 0 END) as total_debit,
+  SUM(CASE WHEN l.sens = 'credit' THEN l.montant ELSE 0 END) as total_credit,
+  SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END) as difference
+FROM transaction_headers h
+JOIN transaction_lines l ON l.header_id = h.id
+WHERE h.statut = 'validee'
+GROUP BY h.reference
+HAVING ABS(SUM(CASE WHEN l.sens = 'debit' THEN l.montant ELSE -l.montant END)) > 0.01;
+-- Ne doit retourner aucune ligne
 ```
 
----
+### 12.2 Statistiques
 
-## 11. Historique des migrations
+#### Nombre de transactions par type
 
-### Phase 1 : Système de taux de change (21 décembre 2024)
+```sql
+SELECT
+  'Simple' as type_transaction,
+  COUNT(*) as total,
+  SUM(CASE WHEN annule THEN 1 ELSE 0 END) as annulees,
+  COUNT(*) - SUM(CASE WHEN annule THEN 1 ELSE 0 END) as actives
+FROM transactions
 
-**Migration** : `20251221110939_20251221_add_exchange_rates_system.sql`
+UNION ALL
 
-**Ajouts** :
-- Table `exchange_rates`
-- Fonction `get_active_exchange_rate()`
-- Trigger `ensure_single_active_rate`
-- Vue `v_active_exchange_rates`
-- Taux par défaut USD/CDF = 2700
+SELECT
+  'Mixte' as type_transaction,
+  COUNT(*) as total,
+  SUM(CASE WHEN statut = 'annulee' THEN 1 ELSE 0 END) as annulees,
+  SUM(CASE WHEN statut = 'validee' THEN 1 ELSE 0 END) as actives
+FROM transaction_headers;
+```
 
-**Objectif** : Permettre la configuration dynamique des taux de change.
+#### Volume de transactions mixtes par mois
 
-### Phase 2 : Transactions multi-lignes (21 décembre 2024)
+```sql
+SELECT
+  TO_CHAR(created_at, 'YYYY-MM') as mois,
+  COUNT(*) as nombre_transactions,
+  SUM(montant_total) as volume_total_usd,
+  AVG(montant_total) as montant_moyen
+FROM transaction_headers
+WHERE statut = 'validee'
+  AND devise_reference = 'USD'
+GROUP BY TO_CHAR(created_at, 'YYYY-MM')
+ORDER BY mois DESC;
+```
 
-**Migration** : `20251221111951_20251221_create_multi_line_transactions.sql`
+#### Raisons de correction les plus fréquentes
 
-**Ajouts** :
-- Table `transaction_headers`
-- Table `transaction_lines`
-- Fonction `generate_transaction_reference()`
-- Fonction `validate_transaction_balance()`
-- Fonction `valider_transaction()`
-- Vue `v_transactions_completes`
-- RLS policies complètes
+```sql
+SELECT
+  raison_correction,
+  COUNT(*) as occurrences
+FROM (
+  SELECT raison_correction
+  FROM transactions
+  WHERE transaction_origine_id IS NOT NULL
 
-**Objectif** : Infrastructure pour comptabilité en partie double.
+  UNION ALL
 
-### Phase 3 : Corrections pour génération de référence (21 décembre)
+  SELECT raison_correction
+  FROM transaction_headers
+  WHERE transaction_origine_id IS NOT NULL
+) corrections
+GROUP BY raison_correction
+ORDER BY occurrences DESC;
+```
 
-**Migrations** :
-- `20251221113907_fix_transactions_reference_generation.sql`
-- `20251221121035_fix_generate_reference_remove_old_trigger.sql`
-- `20251221121046_fix_generate_reference_create_text_function.sql`
-- `20251221125649_recreate_transactions_reference_trigger.sql`
+### 12.3 Audit des corrections
 
-**Corrections** :
-- Type de retour de la fonction de génération (text au lieu de void)
-- Suppression des triggers conflictuels
-- Recréation propre du système de référence
+#### Corrections par utilisateur
 
-### Phase 4 : Triggers de mise à jour des soldes (21 décembre)
+```sql
+SELECT
+  u.nom_complet,
+  COUNT(*) as nombre_corrections,
+  MIN(t.corrigee_le) as premiere_correction,
+  MAX(t.corrigee_le) as derniere_correction
+FROM (
+  SELECT corrigee_par, corrigee_le
+  FROM transactions
+  WHERE annule = true
 
-**Migrations** :
-- `20251221114536_add_multi_line_transaction_triggers.sql`
-- `20251221115018_update_trigger_handle_change_portfolio.sql`
-- `20251221115423_fix_trigger_function_definition.sql`
-- `20251221120348_fix_complete_rebuild_trigger_function.sql`
+  UNION ALL
 
-**Évolution** :
-- Première version du trigger de mise à jour des soldes
-- Corrections successives pour gérer les types de portefeuille
-- Gestion des débits/crédits
-- Ajout du type 'change' dans `type_portefeuille`
+  SELECT corrigee_par, corrigee_le
+  FROM transaction_headers
+  WHERE statut = 'annulee'
+) t
+JOIN users u ON u.id = t.corrigee_par
+GROUP BY u.nom_complet
+ORDER BY nombre_corrections DESC;
+```
 
-### Phase 5 : RLS et permissions (21 décembre)
+#### Dernières corrections
 
-**Migrations** :
-- `20251221120502_fix_rls_policy_allow_validation.sql`
-- `20251221121507_add_change_to_type_portefeuille.sql`
+```sql
+SELECT
+  'Simple' as type,
+  t.reference,
+  t.raison_correction,
+  u.nom_complet as corrigee_par,
+  t.corrigee_le
+FROM transactions t
+JOIN users u ON u.id = t.corrigee_par
+WHERE t.annule = true
 
-**Corrections** :
-- Policies pour permettre la validation par gérants/admins
-- Extension du type `type_portefeuille` pour inclure 'change'
+UNION ALL
 
-### Phase 6 : Fonctions de transactions mixtes (22 décembre)
+SELECT
+  'Mixte' as type,
+  h.reference,
+  h.raison_correction,
+  u.nom_complet as corrigee_par,
+  h.corrigee_le
+FROM transaction_headers h
+JOIN users u ON u.id = h.corrigee_par
+WHERE h.statut = 'annulee'
 
-**Migration** : `20251221092742_create_transaction_mixte_forex.sql`
-
-**Ajouts** :
-- `create_transaction_mixte_retrait()`
-- `create_transaction_mixte_depot()`
-
-**Objectif** : Permettre les paiements combinés USD + CDF avec conversion automatique.
-
-### Phase 7 : Corrections de logique métier (22 décembre)
-
-**Migrations** :
-- `20251222093718_fix_transaction_balance_validation_forex.sql`
-- `20251222100029_fix_balance_update_logic_for_mixed_transactions.sql`
-- `20251222100412_fix_debit_credit_sens_in_mixed_transactions.sql`
-- `20251222100803_fix_mixed_transactions_align_with_old_logic.sql`
-
-**Corrections** :
-- Validation des montants avec tolérance de 0.01
-- Logique correcte de débit/crédit pour soldes
-- Alignement avec le comportement des transactions simples
-
-### Phase 8 : Système de correction (22 décembre)
-
-**Migration** : `20251222081500_20251222_add_transaction_corrections.sql`
-
-**Ajouts** :
-- Colonnes de correction dans `transactions`
-- Fonction `creer_correction_transaction()`
-- Index pour performance
-- RLS policies pour corrections
-
-**Objectif** : Permettre l'annulation et la correction des transactions simples.
-
-### Phase 9 : Vue unifiée et corrections mixtes (24 décembre)
-
-**Migrations** :
-- `20251224164432_fix_correction_add_source_field.sql`
-- `20251224164723_add_correction_to_transaction_headers.sql`
-- `20251224164742_update_view_with_correction_columns.sql`
-- `20251224164848_add_trigger_update_balances_transaction_lines.sql`
-
-**Ajouts** :
-- Colonnes de correction dans `transaction_headers`
-- Fonction `creer_correction_transaction_mixte()`
-- Vue `v_all_transactions` unifiée
-- Trigger `update_balances_from_transaction_lines()`
-
-**Objectif** : Étendre les corrections aux transactions mixtes.
-
-### Phase 10 : Correction critique du trigger (24 décembre)
-
-**Migration** : `20251224165354_fix_trigger_add_where_clause_global_balances.sql`
-
-**Problème** : UPDATE sans WHERE clause sur `global_balances`
-
-**Solution** :
-- Récupération de l'ID de `global_balances`
-- Ajout de `WHERE id = v_global_balance_id`
-- Conformité stricte avec PostgreSQL
-
-**Impact** : Les corrections de transactions mixtes fonctionnent désormais sans erreur.
-
-### Phase 11 : Dashboard et vues (22 décembre)
-
-**Migrations** :
-- `20251221125039_fix_dashboard_use_transaction_headers.sql`
-- `20251221131126_create_service_balances_view.sql`
-- `20251222091221_remove_automatic_commissions_from_dashboard.sql`
-
-**Ajouts** :
-- Vue `v_service_balances` pour affichage optimisé
-- Mise à jour du dashboard pour utiliser les nouvelles tables
-- Suppression du calcul automatique de commissions
-
-### Phase 12 : Commissions et clôtures (22 décembre)
-
-**Migrations** :
-- `20251222090403_create_daily_commissions_table.sql`
-- `20251222091720_create_daily_service_closures_table.sql`
-
-**Ajouts** :
-- Table `daily_commissions` pour enregistrer les commissions journalières
-- Table `daily_service_closures` pour clôtures de service
-
-**Objectif** : Gestion manuelle des commissions au lieu de calcul automatique.
-
-### Phase 13 : Nettoyage et reset (22 décembre)
-
-**Migration** : `20251222101601_reset_database_keep_services_v2.sql`
-
-**Actions** :
-- Suppression de toutes les transactions de test
-- Conservation des services
-- Conservation des taux de change
-- Reset des soldes à zéro
-
-**Objectif** : Préparer la base pour la production.
+ORDER BY corrigee_le DESC
+LIMIT 20;
+```
 
 ---
 
@@ -1036,56 +1189,46 @@ ORDER BY idx_scan DESC;
 
 ### Ce que le système peut faire
 
+- ✅ Gérer deux types de transactions : simples et mixtes
 - ✅ Configurer des taux de change USD/CDF avec historique
-- ✅ Créer des transactions simples (dépôt/retrait) dans une devise
-- ✅ Créer des transactions mixtes avec paiement USD + CDF
-- ✅ Calculer automatiquement les montants en CDF selon le taux
+- ✅ Calculer automatiquement les montants en CDF
 - ✅ Valider l'équilibre comptable (débits = crédits)
-- ✅ Mettre à jour automatiquement tous les soldes (cash et virtuels)
-- ✅ Corriger n'importe quelle transaction (simple ou mixte)
-- ✅ Tracer toutes les corrections avec utilisateur, date et raison
-- ✅ Consulter l'historique complet via une vue unifiée
 - ✅ Générer des références uniques auto-incrémentées
-- ✅ Figer le taux de change au moment de chaque transaction
+- ✅ Mettre à jour automatiquement tous les soldes
+- ✅ Corriger toute transaction avec traçabilité complète
+- ✅ Afficher toutes les transactions dans une vue unifiée
+- ✅ Filtrer par date ou rechercher par référence
+- ✅ Distinguer visuellement les transactions mixtes
 - ✅ Gérer les permissions par rôle utilisateur
-- ✅ Garantir l'intégrité des données via RLS et triggers
+- ✅ Enregistrer un audit trail complet
 
 ### Ce que le système garantit
 
 - ✅ Aucune transaction validée n'est jamais modifiée directement
 - ✅ Les soldes sont toujours cohérents (atomicité garantie)
 - ✅ La comptabilité est équilibrée (débits = crédits)
-- ✅ L'historique complet est conservé (audit trail)
+- ✅ Le taux de change est figé par transaction
+- ✅ L'historique complet est conservé
 - ✅ Les corrections sont traçables à 100%
-- ✅ Les taux de change sont figés par transaction
-- ✅ Un seul taux actif par paire de devises à la fois
+- ✅ Un seul taux actif par paire à la fois
 - ✅ Les opérations sont sécurisées par rôle
 
 ---
 
-## Documents connexes
+## Support
 
-- **GUIDE_TRANSACTIONS_MIXTES_FOREX.md** : Guide utilisateur pour transactions mixtes
-- **SYSTEME_CORRECTION_TRANSACTIONS.md** : Vue technique du système de correction
-- **TRANSACTION_CORRECTIONS.md** : Guide détaillé des corrections
-- **TRANSACTIONS_REFACTORING.md** : Architecture technique du système
-
----
-
-## Support et contact
-
-Pour toute question ou problème :
+Pour toute question :
 
 1. Consulter ce rapport complet
-2. Vérifier les logs d'audit en cas d'erreur
-3. Utiliser les requêtes de maintenance pour diagnostiquer
-4. Contacter l'administrateur système si nécessaire
+2. Vérifier les logs d'audit
+3. Utiliser les requêtes de diagnostic
+4. Contacter l'administrateur système
 
 ---
 
 **Fin du rapport**
 
-**Version** : 2.0
+**Version** : 3.0 (Complète)
 **Date** : 24 décembre 2024
 **Statut** : Production
 **Auteur** : Système de gestion financière Himaya
