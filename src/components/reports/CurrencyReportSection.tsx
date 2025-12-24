@@ -56,7 +56,7 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
       </div>
 
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-slate-50 rounded-lg p-4">
             <div className="flex items-center space-x-2 mb-2">
               <Activity className="w-4 h-4 text-slate-600" />
@@ -66,26 +66,13 @@ export function CurrencyReportSection({ currency, data }: CurrencyReportSectionP
             <p className="text-xs text-slate-500 mt-1">{currency}</p>
           </div>
 
-          <div className="bg-slate-50 rounded-lg p-4">
+          <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-lg p-4 text-white">
             <div className="flex items-center space-x-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-emerald-600" />
-              <p className="text-sm font-medium text-slate-700">Commissions Saisies</p>
+              <TrendingUp className="w-4 h-4 text-white" />
+              <p className="text-sm font-medium text-white">Commissions Saisies</p>
             </div>
-            <p className="text-2xl font-bold text-emerald-600">{formatNumber(data.commissions.total)}</p>
-            <p className="text-xs text-slate-500 mt-1">{data.commissions.count} journées</p>
-          </div>
-
-          <div className="bg-slate-50 rounded-lg p-4">
-            <div className="flex items-center space-x-2 mb-2">
-              <TrendingUp className="w-4 h-4 text-slate-600" />
-              <p className="text-sm font-medium text-slate-700">Taux Commission</p>
-            </div>
-            <p className="text-2xl font-bold text-slate-900">
-              {data.total.volume > 0
-                ? ((data.commissions.total / data.total.volume) * 100).toFixed(2)
-                : '0.00'}%
-            </p>
-            <p className="text-xs text-slate-500 mt-1">Marge moyenne</p>
+            <p className="text-2xl font-bold text-white">{formatNumber(data.commissions.total)}</p>
+            <p className="text-xs text-white/80 mt-1">{data.commissions.count} journées enregistrées</p>
           </div>
         </div>
 
