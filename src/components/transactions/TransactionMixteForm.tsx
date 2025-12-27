@@ -22,43 +22,35 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     info_client: '',
     notes: '',
   });
-  const [exchangeRateUsdCdf, setExchangeRateUsdCdf] = useState<ExchangeRate | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [autoCalculate, setAutoCalculate] = useState(true);
 
   useEffect(() => {
     loadExchangeRate();
-  }, []);
+  }, [formData.devise_reference]);
 
   const loadExchangeRate = async () => {
     try {
+      const deviseSource = formData.devise_reference === 'USD' ? 'USD' : 'CDF';
+      const deviseDestination = formData.devise_reference === 'USD' ? 'CDF' : 'USD';
+
       const { data, error } = await supabase
         .from('exchange_rates')
         .select('*')
-        .eq('devise_source', 'USD')
-        .eq('devise_destination', 'CDF')
+        .eq('devise_source', deviseSource)
+        .eq('devise_destination', deviseDestination)
         .eq('actif', true)
         .maybeSingle();
 
       if (error) throw error;
-      setExchangeRateUsdCdf(data);
+      setExchangeRate(data);
     } catch (err: any) {
       console.error('Erreur chargement taux:', err);
       setError('Impossible de charger le taux de change actif');
     }
   };
-
-  const getTauxActif = () => {
-    if (!exchangeRateUsdCdf) return null;
-    if (formData.devise_reference === 'USD') {
-      return exchangeRateUsdCdf.taux;
-    } else {
-      return 1 / exchangeRateUsdCdf.taux;
-    }
-  };
-
-  const exchangeRate = exchangeRateUsdCdf;
 
   useEffect(() => {
     if (autoCalculate && exchangeRate && formData.montant_total > 0) {
@@ -71,7 +63,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       } else if (formData.devise_reference === 'CDF' && formData.montant_cdf >= 0) {
         const resteCdf = formData.montant_total - formData.montant_cdf;
         if (resteCdf >= 0) {
-          const montantUsdCalcule = resteCdf / exchangeRate.taux;
+          const montantUsdCalcule = resteCdf * exchangeRate.taux;
           setFormData(prev => ({ ...prev, montant_usd: Math.round(montantUsdCalcule * 100) / 100 }));
         }
       }
@@ -105,11 +97,6 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         throw new Error('Au moins un montant doit être renseigné');
       }
 
-      const tauxActif = getTauxActif();
-      if (!tauxActif) {
-        throw new Error('Impossible de calculer le taux de change');
-      }
-
       if (formData.devise_reference === 'USD') {
         const resteUsd = formData.montant_total - formData.montant_usd;
         const montantCdfAttendu = resteUsd * exchangeRate.taux;
@@ -122,11 +109,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         }
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
-        const montantUsdAttendu = resteCdf / exchangeRate.taux;
+        const montantUsdAttendu = resteCdf * exchangeRate.taux;
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 CDF = ${tauxActif.toFixed(6)} USD, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 CDF = ${exchangeRate.taux.toFixed(6)} USD, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
@@ -214,7 +201,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       };
     } else {
       const resteCdf = formData.montant_total - formData.montant_cdf;
-      const montantUsdCalcule = resteCdf / exchangeRate.taux;
+      const montantUsdCalcule = resteCdf * exchangeRate.taux;
 
       return {
         montant_principal: formData.montant_cdf,
@@ -240,14 +227,14 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </div>
       )}
 
-      {exchangeRateUsdCdf && (
+      {exchangeRate && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg">
           <div className="flex items-center space-x-2">
             <Calculator className="w-4 h-4" />
             <span className="text-sm font-medium">
               {formData.devise_reference === 'USD'
-                ? `Taux actif: 1 USD = ${exchangeRateUsdCdf.taux.toLocaleString('fr-FR')} CDF`
-                : `Taux actif: 1 CDF = ${(1 / exchangeRateUsdCdf.taux).toFixed(6)} USD`
+                ? `Taux actif: 1 USD = ${exchangeRate.taux.toLocaleString('fr-FR')} CDF`
+                : `Taux actif: 1 CDF = ${exchangeRate.taux.toFixed(6)} USD`
               }
             </span>
           </div>

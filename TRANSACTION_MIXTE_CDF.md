@@ -124,11 +124,14 @@ Le système vérifie automatiquement que :
 ## Notes techniques
 
 1. **Taux de change** :
-   - Le système charge le taux actif USD/CDF configuré dans le module Taux de change
+   - Le système charge **le bon taux** selon la devise de référence sélectionnée :
+     - **Mode USD** : Charge le taux `USD/CDF` depuis la base de données
+     - **Mode CDF** : Charge le taux `CDF/USD` depuis la base de données
+   - Chaque taux est indépendant et configuré séparément dans le module Taux de change
    - **Affichage adaptatif** :
-     - Quand la devise de référence est USD : affiche "1 USD = X CDF"
-     - Quand la devise de référence est CDF : affiche "1 CDF = Y USD" (où Y = 1/X)
-   - Les calculs restent cohérents quelle que soit la devise de référence
+     - En mode USD : affiche "1 USD = X CDF" (où X est le taux USD/CDF configuré)
+     - En mode CDF : affiche "1 CDF = Y USD" (où Y est le taux CDF/USD configuré)
+   - **Important** : Le système ne calcule PAS l'inverse d'un taux, il charge le taux correspondant directement
 
 2. **Précision** : Les calculs acceptent une tolérance de 0.01 pour les arrondis
 
@@ -136,10 +139,24 @@ Le système vérifie automatiquement que :
 
 4. **Traçabilité** : Chaque transaction est enregistrée dans les audit_logs avec toutes les informations pertinentes
 
-## Exemple de taux affiché
+## Configuration des taux de change
 
-Si le taux USD/CDF configuré est 2200 :
-- **Mode USD** : Affiche "1 USD = 2 200 CDF"
-- **Mode CDF** : Affiche "1 CDF = 0.000455 USD" (calculé comme 1 ÷ 2200)
+Pour utiliser les transactions mixtes dans les deux sens, vous devez configurer **deux taux séparés** dans le module Taux de change :
 
-Cela permet à l'utilisateur de mieux comprendre la conversion selon la devise avec laquelle il travaille.
+### Exemple de configuration :
+
+1. **Taux USD/CDF = 2 300**
+   - Source : USD
+   - Destination : CDF
+   - Taux : 2 300
+   - Utilisé pour les transactions en USD
+   - Signification : 1 USD = 2 300 CDF
+
+2. **Taux CDF/USD = 2 500**
+   - Source : CDF
+   - Destination : USD
+   - Taux : 2 500
+   - Utilisé pour les transactions en CDF
+   - Signification : 1 CDF = 2 500 USD (ou 0.0004 USD si on exprime en décimales)
+
+**Remarque importante** : Les deux taux sont indépendants et peuvent être différents selon la politique de change de votre entreprise. Le système ne calcule jamais automatiquement l'inverse d'un taux, il utilise toujours le taux explicitement configuré dans la direction correspondante.
