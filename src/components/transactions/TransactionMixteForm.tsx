@@ -37,6 +37,8 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       const deviseSource = ref === 'USD' ? 'USD' : 'CDF';
       const deviseDestination = ref === 'USD' ? 'CDF' : 'USD';
 
+      console.log('🔍 Chargement taux - Mode:', ref, '| Recherche:', deviseSource, '→', deviseDestination);
+
       const { data, error } = await supabase
         .from('exchange_rates')
         .select('*')
@@ -46,6 +48,17 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         .maybeSingle();
 
       if (error) throw error;
+
+      if (data) {
+        const rateWithNumber = {
+          ...data,
+          taux: Number(data.taux)
+        };
+        console.log('✅ Taux trouvé:', rateWithNumber.devise_source, '→', rateWithNumber.devise_destination, '=', rateWithNumber.taux);
+        setExchangeRate(rateWithNumber);
+        return rateWithNumber;
+      }
+
       setExchangeRate(data);
       return data;
     } catch (err: any) {
