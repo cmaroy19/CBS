@@ -123,7 +123,23 @@ Le système vérifie automatiquement que :
 
 ## Notes techniques
 
-1. **Taux de change** : Le système utilise toujours le taux actif USD/CDF configuré dans le module Taux de change
+1. **Taux de change** :
+   - Le système charge le taux actif USD/CDF configuré dans le module Taux de change
+   - **Affichage adaptatif** :
+     - Quand la devise de référence est USD : affiche "1 USD = X CDF"
+     - Quand la devise de référence est CDF : affiche "1 CDF = Y USD" (où Y = 1/X)
+   - Les calculs restent cohérents quelle que soit la devise de référence
+
 2. **Précision** : Les calculs acceptent une tolérance de 0.01 pour les arrondis
+
 3. **Équilibrage** : Les lignes de transaction respectent toujours le principe débits = crédits
+
 4. **Traçabilité** : Chaque transaction est enregistrée dans les audit_logs avec toutes les informations pertinentes
+
+## Exemple de taux affiché
+
+Si le taux USD/CDF configuré est 2200 :
+- **Mode USD** : Affiche "1 USD = 2 200 CDF"
+- **Mode CDF** : Affiche "1 CDF = 0.000455 USD" (calculé comme 1 ÷ 2200)
+
+Cela permet à l'utilisateur de mieux comprendre la conversion selon la devise avec laquelle il travaille.

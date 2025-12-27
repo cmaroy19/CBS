@@ -22,7 +22,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     info_client: '',
     notes: '',
   });
-  const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
+  const [exchangeRateUsdCdf, setExchangeRateUsdCdf] = useState<ExchangeRate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [autoCalculate, setAutoCalculate] = useState(true);
@@ -42,12 +42,23 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         .maybeSingle();
 
       if (error) throw error;
-      setExchangeRate(data);
+      setExchangeRateUsdCdf(data);
     } catch (err: any) {
       console.error('Erreur chargement taux:', err);
       setError('Impossible de charger le taux de change actif');
     }
   };
+
+  const getTauxActif = () => {
+    if (!exchangeRateUsdCdf) return null;
+    if (formData.devise_reference === 'USD') {
+      return exchangeRateUsdCdf.taux;
+    } else {
+      return 1 / exchangeRateUsdCdf.taux;
+    }
+  };
+
+  const exchangeRate = exchangeRateUsdCdf;
 
   useEffect(() => {
     if (autoCalculate && exchangeRate && formData.montant_total > 0) {
@@ -94,13 +105,18 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         throw new Error('Au moins un montant doit être renseigné');
       }
 
+      const tauxActif = getTauxActif();
+      if (!tauxActif) {
+        throw new Error('Impossible de calculer le taux de change');
+      }
+
       if (formData.devise_reference === 'USD') {
         const resteUsd = formData.montant_total - formData.montant_usd;
         const montantCdfAttendu = resteUsd * exchangeRate.taux;
 
         if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
           throw new Error(
-            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux}, ` +
+            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux 1 USD = ${exchangeRate.taux.toLocaleString('fr-FR')} CDF, ` +
             `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
           );
         }
@@ -110,7 +126,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${exchangeRate.taux}, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 CDF = ${tauxActif.toFixed(6)} USD, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
@@ -224,12 +240,15 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </div>
       )}
 
-      {exchangeRate && (
+      {exchangeRateUsdCdf && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg">
           <div className="flex items-center space-x-2">
             <Calculator className="w-4 h-4" />
             <span className="text-sm font-medium">
-              Taux actif: 1 USD = {exchangeRate.taux.toLocaleString('fr-FR')} CDF
+              {formData.devise_reference === 'USD'
+                ? `Taux actif: 1 USD = ${exchangeRateUsdCdf.taux.toLocaleString('fr-FR')} CDF`
+                : `Taux actif: 1 CDF = ${(1 / exchangeRateUsdCdf.taux).toFixed(6)} USD`
+              }
             </span>
           </div>
         </div>
