@@ -15,7 +15,8 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   const [formData, setFormData] = useState({
     type: 'retrait' as 'depot' | 'retrait',
     service_id: '',
-    montant_total_usd: 0,
+    devise_reference: 'USD' as 'USD' | 'CDF',
+    montant_total: 0,
     montant_usd: 0,
     montant_cdf: 0,
     info_client: '',
@@ -49,14 +50,22 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   };
 
   useEffect(() => {
-    if (autoCalculate && exchangeRate && formData.montant_total_usd > 0 && formData.montant_usd >= 0) {
-      const resteUsd = formData.montant_total_usd - formData.montant_usd;
-      if (resteUsd >= 0) {
-        const montantCdfCalcule = resteUsd * exchangeRate.taux;
-        setFormData(prev => ({ ...prev, montant_cdf: Math.round(montantCdfCalcule * 100) / 100 }));
+    if (autoCalculate && exchangeRate && formData.montant_total > 0) {
+      if (formData.devise_reference === 'USD' && formData.montant_usd >= 0) {
+        const resteUsd = formData.montant_total - formData.montant_usd;
+        if (resteUsd >= 0) {
+          const montantCdfCalcule = resteUsd * exchangeRate.taux;
+          setFormData(prev => ({ ...prev, montant_cdf: Math.round(montantCdfCalcule * 100) / 100 }));
+        }
+      } else if (formData.devise_reference === 'CDF' && formData.montant_cdf >= 0) {
+        const resteCdf = formData.montant_total - formData.montant_cdf;
+        if (resteCdf >= 0) {
+          const montantUsdCalcule = resteCdf / exchangeRate.taux;
+          setFormData(prev => ({ ...prev, montant_usd: Math.round(montantUsdCalcule * 100) / 100 }));
+        }
       }
     }
-  }, [formData.montant_total_usd, formData.montant_usd, exchangeRate, autoCalculate]);
+  }, [formData.montant_total, formData.montant_usd, formData.montant_cdf, formData.devise_reference, exchangeRate, autoCalculate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,7 +82,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         throw new Error('Aucun taux de change actif. Veuillez configurer un taux dans le module Taux de change.');
       }
 
-      if (formData.montant_total_usd <= 0) {
+      if (formData.montant_total <= 0) {
         throw new Error('Le montant total doit être supérieur à zéro');
       }
 
@@ -85,37 +94,67 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         throw new Error('Au moins un montant doit être renseigné');
       }
 
-      const resteUsd = formData.montant_total_usd - formData.montant_usd;
-      const montantCdfAttendu = resteUsd * exchangeRate.taux;
+      if (formData.devise_reference === 'USD') {
+        const resteUsd = formData.montant_total - formData.montant_usd;
+        const montantCdfAttendu = resteUsd * exchangeRate.taux;
 
-      if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
-        throw new Error(
-          `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux}, ` +
-          `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
-        );
+        if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
+          throw new Error(
+            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux}, ` +
+            `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
+          );
+        }
+      } else {
+        const resteCdf = formData.montant_total - formData.montant_cdf;
+        const montantUsdAttendu = resteCdf / exchangeRate.taux;
+
+        if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
+          throw new Error(
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${exchangeRate.taux}, ` +
+            `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
+          );
+        }
       }
 
-      const functionName = formData.type === 'retrait'
-        ? 'create_transaction_mixte_retrait'
-        : 'create_transaction_mixte_depot';
+      const functionName = formData.devise_reference === 'USD'
+        ? (formData.type === 'retrait' ? 'create_transaction_mixte_retrait' : 'create_transaction_mixte_depot')
+        : (formData.type === 'retrait' ? 'create_transaction_mixte_retrait_cdf' : 'create_transaction_mixte_depot_cdf');
 
-      const params = formData.type === 'retrait' ? {
-        p_service_id: formData.service_id,
-        p_montant_total_usd: formData.montant_total_usd,
-        p_montant_paye_usd: formData.montant_usd,
-        p_montant_paye_cdf: formData.montant_cdf,
-        p_info_client: formData.info_client || null,
-        p_notes: formData.notes || null,
-        p_created_by: user?.id,
-      } : {
-        p_service_id: formData.service_id,
-        p_montant_total_usd: formData.montant_total_usd,
-        p_montant_recu_usd: formData.montant_usd,
-        p_montant_recu_cdf: formData.montant_cdf,
-        p_info_client: formData.info_client || null,
-        p_notes: formData.notes || null,
-        p_created_by: user?.id,
-      };
+      const params = formData.devise_reference === 'USD'
+        ? (formData.type === 'retrait' ? {
+            p_service_id: formData.service_id,
+            p_montant_total_usd: formData.montant_total,
+            p_montant_paye_usd: formData.montant_usd,
+            p_montant_paye_cdf: formData.montant_cdf,
+            p_info_client: formData.info_client || null,
+            p_notes: formData.notes || null,
+            p_created_by: user?.id,
+          } : {
+            p_service_id: formData.service_id,
+            p_montant_total_usd: formData.montant_total,
+            p_montant_recu_usd: formData.montant_usd,
+            p_montant_recu_cdf: formData.montant_cdf,
+            p_info_client: formData.info_client || null,
+            p_notes: formData.notes || null,
+            p_created_by: user?.id,
+          })
+        : (formData.type === 'retrait' ? {
+            p_service_id: formData.service_id,
+            p_montant_total_cdf: formData.montant_total,
+            p_montant_paye_cdf: formData.montant_cdf,
+            p_montant_paye_usd: formData.montant_usd,
+            p_info_client: formData.info_client || null,
+            p_notes: formData.notes || null,
+            p_created_by: user?.id,
+          } : {
+            p_service_id: formData.service_id,
+            p_montant_total_cdf: formData.montant_total,
+            p_montant_recu_cdf: formData.montant_cdf,
+            p_montant_recu_usd: formData.montant_usd,
+            p_info_client: formData.info_client || null,
+            p_notes: formData.notes || null,
+            p_created_by: user?.id,
+          });
 
       const { data, error: rpcError } = await supabase.rpc(functionName, params);
 
@@ -128,7 +167,8 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         new_data: {
           type: formData.type,
           service: service.nom,
-          montant_total_usd: formData.montant_total_usd,
+          devise_reference: formData.devise_reference,
+          montant_total: formData.montant_total,
           montant_usd: formData.montant_usd,
           montant_cdf: formData.montant_cdf,
           taux: exchangeRate.taux,
@@ -145,15 +185,27 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   };
 
   const calculerEquivalent = () => {
-    if (!exchangeRate || formData.montant_total_usd <= 0) return null;
+    if (!exchangeRate || formData.montant_total <= 0) return null;
 
-    const resteUsd = formData.montant_total_usd - formData.montant_usd;
-    const montantCdfCalcule = resteUsd * exchangeRate.taux;
+    if (formData.devise_reference === 'USD') {
+      const resteUsd = formData.montant_total - formData.montant_usd;
+      const montantCdfCalcule = resteUsd * exchangeRate.taux;
 
-    return {
-      resteUsd,
-      montantCdfCalcule
-    };
+      return {
+        montant_principal: formData.montant_usd,
+        reste: resteUsd,
+        montant_secondaire: montantCdfCalcule
+      };
+    } else {
+      const resteCdf = formData.montant_total - formData.montant_cdf;
+      const montantUsdCalcule = resteCdf / exchangeRate.taux;
+
+      return {
+        montant_principal: formData.montant_cdf,
+        reste: resteCdf,
+        montant_secondaire: montantUsdCalcule
+      };
+    }
   };
 
   const equivalent = calculerEquivalent();
@@ -214,21 +266,46 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </select>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">
-          Montant total (USD)
-        </label>
-        <input
-          type="number"
-          step="0.01"
-          min="0.01"
-          value={formData.montant_total_usd || ''}
-          onChange={(e) =>
-            setFormData({ ...formData, montant_total_usd: parseFloat(e.target.value) || 0 })
-          }
-          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          required
-        />
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Devise de référence
+          </label>
+          <select
+            value={formData.devise_reference}
+            onChange={(e) => {
+              const newDevise = e.target.value as 'USD' | 'CDF';
+              setFormData({
+                ...formData,
+                devise_reference: newDevise,
+                montant_total: 0,
+                montant_usd: 0,
+                montant_cdf: 0
+              });
+            }}
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          >
+            <option value="USD">USD</option>
+            <option value="CDF">CDF</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-2">
+            Montant total ({formData.devise_reference})
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0.01"
+            value={formData.montant_total || ''}
+            onChange={(e) =>
+              setFormData({ ...formData, montant_total: parseFloat(e.target.value) || 0 })
+            }
+            className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+            required
+          />
+        </div>
       </div>
 
       <div className="border-t border-slate-200 pt-4">
@@ -246,62 +323,128 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Montant en USD
-            </label>
-            <div className="relative">
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max={formData.montant_total_usd}
-                value={formData.montant_usd || ''}
-                onChange={(e) =>
-                  setFormData({ ...formData, montant_usd: parseFloat(e.target.value) || 0 })
-                }
-                className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              />
-              <DollarSign className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-            </div>
-          </div>
+          {formData.devise_reference === 'USD' ? (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant en USD
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={formData.montant_total}
+                    value={formData.montant_usd || ''}
+                    onChange={(e) =>
+                      setFormData({ ...formData, montant_usd: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <DollarSign className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Montant en CDF
-            </label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              value={formData.montant_cdf || ''}
-              onChange={(e) => {
-                setAutoCalculate(false);
-                setFormData({ ...formData, montant_cdf: parseFloat(e.target.value) || 0 });
-              }}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-            />
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant en CDF
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.montant_cdf || ''}
+                  onChange={(e) => {
+                    setAutoCalculate(false);
+                    setFormData({ ...formData, montant_cdf: parseFloat(e.target.value) || 0 });
+                  }}
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant en CDF
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={formData.montant_total}
+                  value={formData.montant_cdf || ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, montant_cdf: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Montant en USD
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.montant_usd || ''}
+                    onChange={(e) => {
+                      setAutoCalculate(false);
+                      setFormData({ ...formData, montant_usd: parseFloat(e.target.value) || 0 });
+                    }}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                  />
+                  <DollarSign className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {equivalent && exchangeRate && (
           <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
-            <div className="flex justify-between text-slate-600">
-              <span>Montant USD:</span>
-              <span className="font-medium">{formData.montant_usd.toFixed(2)} USD</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Reste à convertir:</span>
-              <span className="font-medium">{equivalent.resteUsd.toFixed(2)} USD</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Équivalent CDF:</span>
-              <span className="font-medium">{equivalent.montantCdfCalcule.toFixed(2)} CDF</span>
-            </div>
-            <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between text-slate-900 font-semibold">
-              <span>Total:</span>
-              <span>{formData.montant_total_usd.toFixed(2)} USD</span>
-            </div>
+            {formData.devise_reference === 'USD' ? (
+              <>
+                <div className="flex justify-between text-slate-600">
+                  <span>Montant USD:</span>
+                  <span className="font-medium">{formData.montant_usd.toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Reste à convertir:</span>
+                  <span className="font-medium">{equivalent.reste.toFixed(2)} USD</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Équivalent CDF:</span>
+                  <span className="font-medium">{equivalent.montant_secondaire.toFixed(2)} CDF</span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between text-slate-900 font-semibold">
+                  <span>Total:</span>
+                  <span>{formData.montant_total.toFixed(2)} USD</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-slate-600">
+                  <span>Montant CDF:</span>
+                  <span className="font-medium">{formData.montant_cdf.toFixed(2)} CDF</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Reste à convertir:</span>
+                  <span className="font-medium">{equivalent.reste.toFixed(2)} CDF</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Équivalent USD:</span>
+                  <span className="font-medium">{equivalent.montant_secondaire.toFixed(2)} USD</span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between text-slate-900 font-semibold">
+                  <span>Total:</span>
+                  <span>{formData.montant_total.toFixed(2)} CDF</span>
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
