@@ -63,7 +63,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       } else if (formData.devise_reference === 'CDF' && formData.montant_cdf >= 0) {
         const resteCdf = formData.montant_total - formData.montant_cdf;
         if (resteCdf >= 0) {
-          const montantUsdCalcule = resteCdf * exchangeRate.taux;
+          const montantUsdCalcule = resteCdf / exchangeRate.taux;
           setFormData(prev => ({ ...prev, montant_usd: Math.round(montantUsdCalcule * 100) / 100 }));
         }
       }
@@ -109,11 +109,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         }
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
-        const montantUsdAttendu = resteCdf * exchangeRate.taux;
+        const montantUsdAttendu = resteCdf / exchangeRate.taux;
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 CDF = ${exchangeRate.taux.toFixed(6)} USD, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${exchangeRate.taux.toLocaleString('fr-FR')} CDF = 1 USD, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
@@ -201,7 +201,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       };
     } else {
       const resteCdf = formData.montant_total - formData.montant_cdf;
-      const montantUsdCalcule = resteCdf * exchangeRate.taux;
+      const montantUsdCalcule = resteCdf / exchangeRate.taux;
 
       return {
         montant_principal: formData.montant_cdf,
@@ -234,7 +234,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
             <span className="text-sm font-medium">
               {formData.devise_reference === 'USD'
                 ? `Taux actif: 1 USD = ${exchangeRate.taux.toLocaleString('fr-FR')} CDF`
-                : `Taux actif: 1 CDF = ${exchangeRate.taux.toFixed(6)} USD`
+                : `Taux actif: ${exchangeRate.taux.toLocaleString('fr-FR')} CDF = 1 USD`
               }
             </span>
           </div>

@@ -130,7 +130,10 @@ Le système vérifie automatiquement que :
    - Chaque taux est indépendant et configuré séparément dans le module Taux de change
    - **Affichage adaptatif** :
      - En mode USD : affiche "1 USD = X CDF" (où X est le taux USD/CDF configuré)
-     - En mode CDF : affiche "1 CDF = Y USD" (où Y est le taux CDF/USD configuré)
+     - En mode CDF : affiche "X CDF = 1 USD" (où X est le taux CDF/USD configuré)
+   - **Calculs** :
+     - En mode USD : Montant CDF = Montant USD × Taux (multiplication)
+     - En mode CDF : Montant USD = Montant CDF ÷ Taux (division)
    - **Important** : Le système ne calcule PAS l'inverse d'un taux, il charge le taux correspondant directement
 
 2. **Précision** : Les calculs acceptent une tolérance de 0.01 pour les arrondis
@@ -157,6 +160,6 @@ Pour utiliser les transactions mixtes dans les deux sens, vous devez configurer 
    - Destination : USD
    - Taux : 2 500
    - Utilisé pour les transactions en CDF
-   - Signification : 1 CDF = 2 500 USD (ou 0.0004 USD si on exprime en décimales)
+   - Signification : **2 500 CDF = 1 USD** (ou 1 CDF = 0.0004 USD)
 
 **Remarque importante** : Les deux taux sont indépendants et peuvent être différents selon la politique de change de votre entreprise. Le système ne calcule jamais automatiquement l'inverse d'un taux, il utilise toujours le taux explicitement configuré dans la direction correspondante.
