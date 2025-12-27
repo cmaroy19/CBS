@@ -31,10 +31,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     loadExchangeRate();
   }, [formData.devise_reference]);
 
-  const loadExchangeRate = async () => {
+  const loadExchangeRate = async (deviseRef?: 'USD' | 'CDF') => {
     try {
-      const deviseSource = formData.devise_reference === 'USD' ? 'USD' : 'CDF';
-      const deviseDestination = formData.devise_reference === 'USD' ? 'CDF' : 'USD';
+      const ref = deviseRef || formData.devise_reference;
+      const deviseSource = ref === 'USD' ? 'USD' : 'CDF';
+      const deviseDestination = ref === 'USD' ? 'CDF' : 'USD';
 
       const { data, error } = await supabase
         .from('exchange_rates')
@@ -46,9 +47,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
       if (error) throw error;
       setExchangeRate(data);
+      return data;
     } catch (err: any) {
       console.error('Erreur chargement taux:', err);
       setError('Impossible de charger le taux de change actif');
+      return null;
     }
   };
 
@@ -76,14 +79,18 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     setLoading(true);
 
     try {
+      const currentRate = await loadExchangeRate(formData.devise_reference);
+
       const service = services.find((s) => s.id === formData.service_id);
       if (!service) {
         throw new Error('Service non trouvé');
       }
 
-      if (!exchangeRate) {
+      if (!currentRate) {
         throw new Error('Aucun taux de change actif. Veuillez configurer un taux dans le module Taux de change.');
       }
+
+      console.log('Mode:', formData.devise_reference, 'Taux chargé:', currentRate.devise_source, '->', currentRate.devise_destination, '=', currentRate.taux);
 
       if (formData.montant_total <= 0) {
         throw new Error('Le montant total doit être supérieur à zéro');
@@ -99,21 +106,21 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
       if (formData.devise_reference === 'USD') {
         const resteUsd = formData.montant_total - formData.montant_usd;
-        const montantCdfAttendu = resteUsd * exchangeRate.taux;
+        const montantCdfAttendu = resteUsd * currentRate.taux;
 
         if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
           throw new Error(
-            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux 1 USD = ${exchangeRate.taux.toLocaleString('fr-FR')} CDF, ` +
+            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux 1 USD = ${currentRate.taux.toLocaleString('fr-FR')} CDF, ` +
             `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
           );
         }
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
-        const montantUsdAttendu = resteCdf / exchangeRate.taux;
+        const montantUsdAttendu = resteCdf / currentRate.taux;
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${exchangeRate.taux.toLocaleString('fr-FR')} CDF = 1 USD, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${currentRate.taux.toLocaleString('fr-FR')} CDF = 1 USD, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
