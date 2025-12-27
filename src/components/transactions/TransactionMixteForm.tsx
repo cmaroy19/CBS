@@ -28,7 +28,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   const [autoCalculate, setAutoCalculate] = useState(true);
 
   useEffect(() => {
-    loadExchangeRate();
+    loadExchangeRate(formData.devise_reference);
   }, [formData.devise_reference]);
 
   const loadExchangeRate = async (deviseRef?: 'USD' | 'CDF') => {
@@ -37,7 +37,12 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       const deviseSource = ref === 'USD' ? 'USD' : 'CDF';
       const deviseDestination = ref === 'USD' ? 'CDF' : 'USD';
 
-      console.log('🔍 Chargement taux - Mode:', ref, '| Recherche:', deviseSource, '→', deviseDestination);
+      console.log('🔍 CHARGEMENT TAUX');
+      console.log('  - Paramètre deviseRef:', deviseRef);
+      console.log('  - formData.devise_reference:', formData.devise_reference);
+      console.log('  - ref utilisé:', ref);
+      console.log('  - deviseSource:', deviseSource);
+      console.log('  - deviseDestination:', deviseDestination);
 
       const { data, error } = await supabase
         .from('exchange_rates')
@@ -45,24 +50,37 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         .eq('devise_source', deviseSource)
         .eq('devise_destination', deviseDestination)
         .eq('actif', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
 
-      if (error) throw error;
+      console.log('  - Données brutes:', JSON.stringify(data));
+
+      if (error) {
+        console.error('  - ERREUR SQL:', error);
+        throw error;
+      }
 
       if (data) {
         const rateWithNumber = {
           ...data,
           taux: Number(data.taux)
         };
-        console.log('✅ Taux trouvé:', rateWithNumber.devise_source, '→', rateWithNumber.devise_destination, '=', rateWithNumber.taux);
+        console.log('✅ TAUX FINAL:', {
+          source: rateWithNumber.devise_source,
+          destination: rateWithNumber.devise_destination,
+          taux: rateWithNumber.taux,
+          taux_type: typeof rateWithNumber.taux
+        });
         setExchangeRate(rateWithNumber);
         return rateWithNumber;
       }
 
-      setExchangeRate(data);
-      return data;
+      console.log('⚠️ Aucun taux trouvé');
+      setExchangeRate(null);
+      return null;
     } catch (err: any) {
-      console.error('Erreur chargement taux:', err);
+      console.error('❌ ERREUR chargement taux:', err);
       setError('Impossible de charger le taux de change actif');
       return null;
     }
@@ -92,6 +110,14 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     setLoading(true);
 
     try {
+      console.log('🚀 DEBUT SUBMIT - devise_reference:', formData.devise_reference);
+      console.log('📊 Données form:', {
+        montant_total: formData.montant_total,
+        montant_usd: formData.montant_usd,
+        montant_cdf: formData.montant_cdf,
+        devise_reference: formData.devise_reference
+      });
+
       const currentRate = await loadExchangeRate(formData.devise_reference);
 
       const service = services.find((s) => s.id === formData.service_id);
@@ -103,7 +129,13 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         throw new Error('Aucun taux de change actif. Veuillez configurer un taux dans le module Taux de change.');
       }
 
-      console.log('Mode:', formData.devise_reference, 'Taux chargé:', currentRate.devise_source, '->', currentRate.devise_destination, '=', currentRate.taux);
+      console.log('💰 TAUX UTILISE:', {
+        mode: formData.devise_reference,
+        source: currentRate.devise_source,
+        destination: currentRate.devise_destination,
+        taux: currentRate.taux,
+        type_taux: typeof currentRate.taux
+      });
 
       if (formData.montant_total <= 0) {
         throw new Error('Le montant total doit être supérieur à zéro');
