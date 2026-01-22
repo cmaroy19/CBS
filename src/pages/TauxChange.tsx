@@ -5,9 +5,17 @@ import { TrendingUp, Plus, Edit2, CheckCircle, XCircle } from 'lucide-react';
 import { Modal } from '../components/ui/Modal';
 import type { ExchangeRate } from '../types';
 
+interface RatesSummary {
+  taux_usd_to_cdf: number | null;
+  taux_cdf_to_usd: number | null;
+  ecart_taux: number | null;
+  marge_pct: number | null;
+}
+
 export function TauxChange() {
   const { user } = useAuthStore();
   const [rates, setRates] = useState<ExchangeRate[]>([]);
+  const [ratesSummary, setRatesSummary] = useState<RatesSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingRate, setEditingRate] = useState<ExchangeRate | null>(null);
@@ -17,6 +25,7 @@ export function TauxChange() {
 
   useEffect(() => {
     loadRates();
+    loadRatesSummary();
   }, []);
 
   const loadRates = async () => {
@@ -24,7 +33,7 @@ export function TauxChange() {
       const { data, error } = await supabase
         .from('exchange_rates')
         .select('*')
-        .order('date_debut', { ascending: false });
+        .order('date_debut', { ascending: false});
 
       if (error) throw error;
       setRates(data || []);
@@ -33,6 +42,20 @@ export function TauxChange() {
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadRatesSummary = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('v_exchange_rates_summary')
+        .select('*')
+        .maybeSingle();
+
+      if (error) throw error;
+      setRatesSummary(data);
+    } catch (err: any) {
+      console.error('Erreur chargement résumé taux:', err);
     }
   };
 
@@ -48,6 +71,7 @@ export function TauxChange() {
 
   const handleSuccess = () => {
     loadRates();
+    loadRatesSummary();
     handleCloseForm();
   };
 
@@ -85,6 +109,58 @@ export function TauxChange() {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
           {error}
+        </div>
+      )}
+
+      {ratesSummary && (ratesSummary.taux_usd_to_cdf || ratesSummary.taux_cdf_to_usd) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6 border border-blue-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-blue-700">USD → CDF</span>
+              <span className="text-xs text-blue-600">Achat USD</span>
+            </div>
+            <div className="text-2xl font-bold text-blue-900">
+              {ratesSummary.taux_usd_to_cdf
+                ? ratesSummary.taux_usd_to_cdf.toLocaleString('fr-FR', { minimumFractionDigits: 2 })
+                : '-'}
+            </div>
+            <div className="text-xs text-blue-600 mt-1">1 USD = {ratesSummary.taux_usd_to_cdf || '-'} CDF</div>
+          </div>
+
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl p-6 border border-emerald-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-emerald-700">CDF → USD</span>
+              <span className="text-xs text-emerald-600">Vente USD</span>
+            </div>
+            <div className="text-2xl font-bold text-emerald-900">
+              {ratesSummary.taux_cdf_to_usd
+                ? ratesSummary.taux_cdf_to_usd.toLocaleString('fr-FR', { minimumFractionDigits: 6 })
+                : '-'}
+            </div>
+            <div className="text-xs text-emerald-600 mt-1">
+              1 CDF = {ratesSummary.taux_cdf_to_usd || '-'} USD
+              {ratesSummary.taux_cdf_to_usd && (
+                <span className="block mt-0.5">
+                  (équiv: 1 USD = {(1 / ratesSummary.taux_cdf_to_usd).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF)
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-xl p-6 border border-amber-200">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-amber-700">Marge commerciale</span>
+              <span className="text-xs text-amber-600">Écart</span>
+            </div>
+            <div className="text-2xl font-bold text-amber-900">
+              {ratesSummary.marge_pct !== null ? `${ratesSummary.marge_pct}%` : '-'}
+            </div>
+            <div className="text-xs text-amber-600 mt-1">
+              {ratesSummary.ecart_taux !== null
+                ? `${ratesSummary.ecart_taux.toFixed(2)} CDF d'écart`
+                : 'Aucun écart calculable'}
+            </div>
+          </div>
         </div>
       )}
 
