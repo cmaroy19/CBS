@@ -64,7 +64,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         const resteUsd = formData.montant_total - formData.montant_usd;
         if (resteUsd >= 0) {
           const montantCdfCalcule = resteUsd * exchangeRate.taux;
-          setFormData(prev => ({ ...prev, montant_cdf: Math.round(montantCdfCalcule * 100) / 100 }));
+          setFormData(prev => ({ ...prev, montant_cdf: Math.round(montantCdfCalcule) }));
         }
       } else if (formData.devise_reference === 'CDF' && formData.montant_cdf >= 0) {
         const resteCdf = formData.montant_total - formData.montant_cdf;
@@ -209,22 +209,29 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       const montantCdfCalcule = resteUsd * exchangeRate.taux;
 
       return {
-        principale: formData.montant_usd,
-        reste: resteUsd,
-        complementaire: montantCdfCalcule,
-        labelPrincipale: 'USD',
-        labelComplementaire: 'CDF'
+        montantPrincipal: formData.montant_total,
+        devisePrincipale: 'USD',
+        montantPaye1: formData.montant_usd,
+        devise1: 'USD',
+        montantPaye2: Math.round(montantCdfCalcule),
+        devise2: 'CDF',
+        tauxAffichage: exchangeRate.taux.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        reste: resteUsd
       };
     } else {
       const resteCdf = formData.montant_total - formData.montant_cdf;
       const montantUsdCalcule = resteCdf * exchangeRate.taux;
+      const tauxAffiche = 1 / exchangeRate.taux;
 
       return {
-        principale: formData.montant_cdf,
-        reste: resteCdf,
-        complementaire: montantUsdCalcule,
-        labelPrincipale: 'CDF',
-        labelComplementaire: 'USD'
+        montantPrincipal: formData.montant_total,
+        devisePrincipale: 'CDF',
+        montantPaye1: formData.montant_cdf,
+        devise1: 'CDF',
+        montantPaye2: Math.round(montantUsdCalcule * 100) / 100,
+        devise2: 'USD',
+        tauxAffichage: tauxAffiche.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        reste: resteCdf
       };
     }
   };
@@ -318,17 +325,21 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">
-          Montant total ({formData.devise_reference})
+          Montant principal ({formData.devise_reference})
+          <span className="text-xs text-slate-500 ml-2">
+            (montant {formData.type === 'retrait' ? 'débité du' : 'crédité au'} service virtuel)
+          </span>
         </label>
         <input
           type="number"
-          step="0.01"
-          min="0.01"
+          step={formData.devise_reference === 'USD' ? '0.01' : '1'}
+          min={formData.devise_reference === 'USD' ? '0.01' : '1'}
           value={formData.montant_total || ''}
           onChange={(e) =>
             setFormData({ ...formData, montant_total: parseFloat(e.target.value) || 0 })
           }
           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+          placeholder={formData.devise_reference === 'USD' ? '0.00' : '0'}
           required
         />
       </div>
@@ -350,7 +361,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Montant en USD
+              Montant {formData.type === 'retrait' ? 'payé' : 'reçu'} en USD
             </label>
             <div className="relative">
               <input
@@ -363,6 +374,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
                   setFormData({ ...formData, montant_usd: parseFloat(e.target.value) || 0 })
                 }
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                placeholder="0.00"
               />
               <DollarSign className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
             </div>
@@ -370,11 +382,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
-              Montant en CDF
+              Montant {formData.type === 'retrait' ? 'payé' : 'reçu'} en CDF
             </label>
             <input
               type="number"
-              step="0.01"
+              step="1"
               min="0"
               max={formData.devise_reference === 'USD' ? undefined : formData.montant_total}
               value={formData.montant_cdf || ''}
@@ -383,27 +395,85 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
                 setFormData({ ...formData, montant_cdf: parseFloat(e.target.value) || 0 });
               }}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+              placeholder="0"
             />
           </div>
         </div>
 
         {equivalent && exchangeRate && (
-          <div className="mt-3 p-3 bg-slate-50 rounded-lg text-sm space-y-1">
-            <div className="flex justify-between text-slate-600">
-              <span>Montant {equivalent.labelPrincipale}:</span>
-              <span className="font-medium">{equivalent.principale.toFixed(2)} {equivalent.labelPrincipale}</span>
+          <div className="mt-3 p-4 bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-200 rounded-lg text-sm space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-emerald-200">
+              <span className="text-slate-700 font-semibold">
+                {formData.type === 'retrait' ? 'Détail du paiement' : 'Détail de la réception'}
+              </span>
+              <span className="text-emerald-700 text-xs font-medium">
+                Taux: 1 {formData.devise_reference === 'USD' ? 'USD' : 'USD'} = {equivalent.tauxAffichage} {formData.devise_reference === 'USD' ? 'CDF' : 'CDF'}
+              </span>
             </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Reste à convertir:</span>
-              <span className="font-medium">{equivalent.reste.toFixed(2)} {formData.devise_reference}</span>
-            </div>
-            <div className="flex justify-between text-slate-600">
-              <span>Équivalent {equivalent.labelComplementaire}:</span>
-              <span className="font-medium">{equivalent.complementaire.toFixed(2)} {equivalent.labelComplementaire}</span>
-            </div>
-            <div className="border-t border-slate-200 pt-2 mt-2 flex justify-between text-slate-900 font-semibold">
-              <span>Total:</span>
-              <span>{formData.montant_total.toFixed(2)} {formData.devise_reference}</span>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-slate-700">
+                <span className="flex items-center">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full mr-2"></span>
+                  Montant principal
+                </span>
+                <span className="font-bold text-emerald-700">
+                  {equivalent.montantPrincipal.toLocaleString('fr-FR', {
+                    minimumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0,
+                    maximumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0
+                  })} {equivalent.devisePrincipale}
+                </span>
+              </div>
+
+              <div className="pl-4 space-y-1.5 border-l-2 border-emerald-200">
+                <div className="flex justify-between items-center text-slate-600">
+                  <span className="text-xs">
+                    {formData.type === 'retrait' ? 'Payé' : 'Reçu'} en {equivalent.devise1}
+                  </span>
+                  <span className="font-semibold">
+                    {equivalent.montantPaye1.toLocaleString('fr-FR', {
+                      minimumFractionDigits: equivalent.devise1 === 'USD' ? 2 : 0,
+                      maximumFractionDigits: equivalent.devise1 === 'USD' ? 2 : 0
+                    })} {equivalent.devise1}
+                  </span>
+                </div>
+
+                {equivalent.reste > 0 && (
+                  <>
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="text-xs">Reste à convertir</span>
+                      <span className="font-medium text-xs">
+                        {equivalent.reste.toLocaleString('fr-FR', {
+                          minimumFractionDigits: formData.devise_reference === 'USD' ? 2 : 0,
+                          maximumFractionDigits: formData.devise_reference === 'USD' ? 2 : 0
+                        })} {formData.devise_reference}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-600">
+                      <span className="text-xs">
+                        {formData.type === 'retrait' ? 'Payé' : 'Reçu'} en {equivalent.devise2}
+                      </span>
+                      <span className="font-semibold">
+                        {equivalent.montantPaye2.toLocaleString('fr-FR', {
+                          minimumFractionDigits: equivalent.devise2 === 'USD' ? 2 : 0,
+                          maximumFractionDigits: equivalent.devise2 === 'USD' ? 2 : 0
+                        })} {equivalent.devise2}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-emerald-200 flex justify-between items-center">
+                <span className="text-slate-700 font-semibold">Impact sur le service</span>
+                <span className="text-emerald-700 font-bold">
+                  {formData.type === 'retrait' ? '-' : '+'}{equivalent.montantPrincipal.toLocaleString('fr-FR', {
+                    minimumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0,
+                    maximumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0
+                  })} {equivalent.devisePrincipale}
+                </span>
+              </div>
             </div>
           </div>
         )}
