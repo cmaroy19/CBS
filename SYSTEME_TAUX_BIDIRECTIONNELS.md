@@ -253,10 +253,18 @@ SELECT initialize_bidirectional_rates();
 2. Remplir le formulaire :
    - Devise source : **CDF**
    - Devise destination : **USD**
-   - Taux : **0.000444444** (1/2250)
+   - Taux : **2250** *(saisie normalisée)*
    - Actif : **Coché**
    - Notes : "Taux de vente USD - Achat CDF (1 USD = 2250 CDF)"
 3. Cliquer sur **Créer**
+
+**💡 Note importante - Saisie normalisée :**
+Pour les taux CDF → USD, le système utilise une **saisie normalisée** pour simplifier l'utilisation :
+- **Vous saisissez** : 2250 (le taux équivalent "1 USD = 2250 CDF")
+- **Le système enregistre** : 0.000444444 (taux interne = 1/2250)
+- **Le système affiche** : 2250 (valeur normalisée pour faciliter la lecture)
+
+Cette approche évite de manipuler des décimales complexes (0.000444) et permet de saisir directement le taux équivalent en CDF par USD.
 
 #### Étape 4 : Vérifier le résumé
 
@@ -295,6 +303,67 @@ Le tableau de bord affiche maintenant :
 3. Le taux utilisé : **CDF → USD = 0.000444444** (soit 1 USD = 2250 CDF)
 4. Validation : 112,500 + (50 × 2250) = 112,500 + 112,500 = 225,000 ✓
 
+### 5.3 Saisie normalisée pour les taux CDF → USD
+
+#### Problématique
+
+Les taux CDF → USD sont naturellement très petits (ex: 0.000444444), ce qui rend la saisie et la lecture difficiles et sujettes à erreurs.
+
+#### Solution : Saisie normalisée
+
+Le système utilise une **saisie normalisée** pour les taux CDF → USD uniquement :
+
+| Aspect | Comportement |
+|--------|--------------|
+| **Saisie utilisateur** | Valeur > 1 représentant "1 USD = X CDF" (ex: 2500) |
+| **Conversion interne** | `taux_interne = 1 / valeur_saisie` (ex: 1/2500 = 0.0004) |
+| **Stockage base** | Taux interne (ex: 0.0004) |
+| **Affichage interface** | Valeur normalisée (ex: 2500) |
+| **Calculs transactions** | Utilise toujours le taux interne (0.0004) |
+
+#### Exemple pratique
+
+**Scénario :** Configurer un taux de vente USD à 2500 CDF
+
+**Étapes :**
+1. Ouvrir le formulaire "Nouveau taux"
+2. Sélectionner :
+   - Devise source : **CDF**
+   - Devise destination : **USD**
+3. Dans le champ "Taux de change", saisir : **2500**
+4. Le système affiche en temps réel :
+   - "1 USD = 2500 CDF (taux de vente)"
+   - "Taux interne enregistré: 0.0004 (1 CDF = 0.0004 USD)"
+5. Cliquer sur **Créer**
+
+**Résultat en base de données :**
+```sql
+-- Enregistré dans la table exchange_rates
+devise_source: 'CDF'
+devise_destination: 'USD'
+taux: 0.0004  -- Taux interne calculé automatiquement
+```
+
+**Affichage dans le tableau :**
+- Colonne "Taux" : **2500** (valeur normalisée)
+- Sous-texte : "(taux interne: 0.0004)"
+
+#### Avantages
+
+1. **Simplicité** : Saisie intuitive de valeurs familières (2500 au lieu de 0.0004)
+2. **Réduction d'erreurs** : Évite les erreurs de décimales
+3. **Cohérence visuelle** : Tous les taux affichés sont > 1
+4. **Transparence** : Le taux interne reste visible pour vérification
+5. **Calculs corrects** : Les transactions utilisent toujours le taux interne précis
+
+#### Notes importantes
+
+- Cette fonctionnalité s'applique **uniquement** aux taux CDF → USD
+- Les taux USD → CDF sont saisis normalement (ex: 2200)
+- Les calculs de transactions utilisent toujours le taux interne exact
+- La conversion est automatique et transparente
+- Les taux existants sont automatiquement convertis pour l'affichage
+
 ---
 
 ## 6. Exemples pratiques
@@ -309,15 +378,20 @@ Le tableau de bord affiche maintenant :
 - Taux d'achat USD : 2200 (on achète l'USD du client)
 - Taux de vente USD : 2200 × 1.02 = 2244 (on vend l'USD au client)
 
-**Configuration :**
+**Configuration via interface :**
+1. **Taux USD → CDF** : Saisir **2200**
+2. **Taux CDF → USD** : Saisir **2244** (saisie normalisée, converti en 1/2244 = 0.000445632 en interne)
+
+**Configuration SQL directe :**
 ```sql
 -- Taux d'achat USD (client vend USD)
 INSERT INTO exchange_rates (devise_source, devise_destination, taux, actif, notes)
 VALUES ('USD', 'CDF', 2200, true, 'Taux achat USD - Marge 2%');
 
 -- Taux de vente USD (client achète USD)
+-- Note: Taux interne = 1/2244, mais saisie interface = 2244
 INSERT INTO exchange_rates (devise_source, devise_destination, taux, actif, notes)
-VALUES ('CDF', 'USD', 1/2244, true, 'Taux vente USD - Marge 2%');
+VALUES ('CDF', 'USD', 1.0/2244, true, 'Taux vente USD - Marge 2%');
 ```
 
 **Résultat :**

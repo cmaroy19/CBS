@@ -134,15 +134,19 @@ export function TauxChange() {
             </div>
             <div className="text-2xl font-bold text-emerald-900">
               {ratesSummary.taux_cdf_to_usd
-                ? ratesSummary.taux_cdf_to_usd.toLocaleString('fr-FR', { minimumFractionDigits: 6 })
+                ? (1 / ratesSummary.taux_cdf_to_usd).toLocaleString('fr-FR', { minimumFractionDigits: 2 })
                 : '-'}
             </div>
             <div className="text-xs text-emerald-600 mt-1">
-              1 CDF = {ratesSummary.taux_cdf_to_usd || '-'} USD
               {ratesSummary.taux_cdf_to_usd && (
-                <span className="block mt-0.5">
-                  (équiv: 1 USD = {(1 / ratesSummary.taux_cdf_to_usd).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF)
-                </span>
+                <>
+                  <span className="block">
+                    1 USD = {(1 / ratesSummary.taux_cdf_to_usd).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
+                  </span>
+                  <span className="block mt-0.5 text-emerald-500">
+                    (taux interne: {ratesSummary.taux_cdf_to_usd.toFixed(6)})
+                  </span>
+                </>
               )}
             </div>
           </div>
@@ -208,8 +212,15 @@ export function TauxChange() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <span className="text-lg font-bold text-slate-900">
-                        {rate.taux.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
+                        {rate.devise_source === 'CDF' && rate.devise_destination === 'USD'
+                          ? (1 / rate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })
+                          : rate.taux.toLocaleString('fr-FR', { minimumFractionDigits: 2 })}
                       </span>
+                      {rate.devise_source === 'CDF' && rate.devise_destination === 'USD' && (
+                        <div className="text-xs text-slate-500 mt-1">
+                          (taux interne: {rate.taux.toFixed(6)})
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-center">
                       {rate.actif ? (
@@ -281,10 +292,22 @@ interface ExchangeRateFormProps {
 
 function ExchangeRateForm({ rate, onSuccess, onCancel }: ExchangeRateFormProps) {
   const { user } = useAuthStore();
+
+  const isNormalizedRate = (source: string, dest: string) =>
+    source === 'CDF' && dest === 'USD';
+
+  const getInitialTaux = () => {
+    if (!rate?.taux) return 0;
+    if (isNormalizedRate(rate.devise_source, rate.devise_destination)) {
+      return 1 / rate.taux;
+    }
+    return rate.taux;
+  };
+
   const [formData, setFormData] = useState({
     devise_source: rate?.devise_source || 'USD',
     devise_destination: rate?.devise_destination || 'CDF',
-    taux: rate?.taux || 0,
+    taux: getInitialTaux(),
     actif: rate?.actif ?? true,
     date_debut: rate?.date_debut?.split('T')[0] || new Date().toISOString().split('T')[0],
     date_fin: rate?.date_fin?.split('T')[0] || '',
@@ -307,10 +330,14 @@ function ExchangeRateForm({ rate, onSuccess, onCancel }: ExchangeRateFormProps) 
         throw new Error('Les devises source et destination doivent être différentes');
       }
 
+      const tauxInterne = isNormalizedRate(formData.devise_source, formData.devise_destination)
+        ? 1 / formData.taux
+        : formData.taux;
+
       const payload: any = {
         devise_source: formData.devise_source,
         devise_destination: formData.devise_destination,
-        taux: formData.taux,
+        taux: tauxInterne,
         actif: formData.actif,
         date_debut: formData.date_debut,
         date_fin: formData.date_fin || null,
@@ -389,6 +416,11 @@ function ExchangeRateForm({ rate, onSuccess, onCancel }: ExchangeRateFormProps) 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-2">
           Taux de change
+          {isNormalizedRate(formData.devise_source, formData.devise_destination) && (
+            <span className="ml-2 text-xs font-normal text-emerald-600">
+              (saisie normalisée)
+            </span>
+          )}
         </label>
         <input
           type="number"
@@ -397,12 +429,27 @@ function ExchangeRateForm({ rate, onSuccess, onCancel }: ExchangeRateFormProps) 
           value={formData.taux || ''}
           onChange={(e) => setFormData({ ...formData, taux: parseFloat(e.target.value) || 0 })}
           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-          placeholder="Ex: 2700"
+          placeholder={
+            isNormalizedRate(formData.devise_source, formData.devise_destination)
+              ? 'Ex: 2500 (équiv. 1 USD = 2500 CDF)'
+              : 'Ex: 2700'
+          }
           required
         />
-        <p className="text-xs text-slate-500 mt-1">
-          1 {formData.devise_source} = {formData.taux || 0} {formData.devise_destination}
-        </p>
+        {isNormalizedRate(formData.devise_source, formData.devise_destination) ? (
+          <div className="text-xs text-slate-500 mt-1 space-y-1">
+            <p className="font-medium text-emerald-600">
+              1 USD = {formData.taux || 0} CDF (taux de vente)
+            </p>
+            <p className="text-slate-400">
+              Taux interne enregistré: {formData.taux > 0 ? (1 / formData.taux).toFixed(6) : '0'} (1 CDF = {formData.taux > 0 ? (1 / formData.taux).toFixed(6) : '0'} USD)
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500 mt-1">
+            1 {formData.devise_source} = {formData.taux || 0} {formData.devise_destination}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
