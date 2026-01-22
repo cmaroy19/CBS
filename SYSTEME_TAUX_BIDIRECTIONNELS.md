@@ -17,6 +17,7 @@
 7. [Migration depuis l'ancien système](#7-migration-depuis-lancien-système)
 8. [Maintenance et dépannage](#8-maintenance-et-dépannage)
 9. [Correction du Calcul CDF→USD](#9-correction-du-calcul-cdfusd-22-janvier-2026)
+10. [Correction de l'Équilibre Comptable](#10-correction-de-léquilibre-comptable-22-janvier-2026)
 
 ---
 
@@ -755,6 +756,153 @@ SELECT create_transaction_mixte_retrait_cdf(
 - Les transactions existantes ne sont **pas affectées** (taux gelé dans `transaction_headers`)
 - Les calculs des transactions USD→CDF restent **inchangés**
 - Seules les nouvelles transactions CDF→USD utilisent la logique corrigée
+
+---
+
+## 10. Correction de l'Équilibre Comptable (22 janvier 2026)
+
+### 10.1 Problème corrigé
+
+Après la correction du calcul des taux CDF→USD, une nouvelle erreur apparaissait :
+```
+Transaction non équilibrée: les débits ne sont pas égaux aux crédits
+```
+
+#### Causes racines
+
+Deux problèmes distincts causaient cette erreur :
+
+##### Problème 1 : Validation globale au lieu de par devise
+
+La fonction `validate_transaction_balance` additionnait tous les montants ensemble sans distinction de devise :
+
+```sql
+-- ❌ Ancien code
+total_debit = 250,000 CDF + 100 USD = 250,100  (non sens mathématique)
+total_credit = 250,000 CDF + 100 USD = 250,100 (non sens mathématique)
+```
+
+##### Problème 2 : Lignes de conversion manquantes
+
+Les écritures comptables ne contenaient pas de lignes de conversion entre USD et CDF, rendant impossible l'équilibre par devise.
+
+**Exemple du problème :**
+Transaction : Retrait 250,000 CDF payé en 150,000 CDF + 100 USD
+
+**Écritures incorrectes :**
+```
+Débit service virtuel CDF : 250,000
+Crédit cash CDF : 150,000
+Crédit cash USD : 100
+```
+
+**Équilibre par devise :**
+- CDF : 250,000 ≠ 150,000 ❌
+- USD : 0 ≠ 100 ❌
+
+### 10.2 Solutions implémentées
+
+#### Solution 1 : Validation par devise séparée
+
+```sql
+-- ✅ Nouveau code
+-- Vérifier USD séparément
+IF ABS(v_debit_usd - v_credit_usd) > 0.01 THEN
+  RAISE EXCEPTION 'Transaction non équilibrée pour USD: débits=% USD, crédits=% USD';
+END IF;
+
+-- Vérifier CDF séparément
+IF ABS(v_debit_cdf - v_credit_cdf) > 0.01 THEN
+  RAISE EXCEPTION 'Transaction non équilibrée pour CDF: débits=% CDF, crédits=% CDF';
+END IF;
+```
+
+#### Solution 2 : Ajout des lignes de conversion
+
+**Écritures correctes :**
+Transaction : Retrait 250,000 CDF payé en 150,000 CDF + 100 USD (taux 2500)
+
+```
+Ligne 1 : Débit service virtuel CDF : 250,000 CDF
+Ligne 2 : Crédit cash CDF : 150,000 CDF
+Ligne 3 : Crédit service virtuel CDF : 100,000 CDF (conversion)
+Ligne 4 : Débit service virtuel USD : 100 USD (conversion)
+Ligne 5 : Crédit cash USD : 100 USD
+```
+
+**Équilibre par devise :**
+- CDF : 250,000 = 150,000 + 100,000 ✅
+- USD : 100 = 100 ✅
+
+### 10.3 Logique comptable complète
+
+#### Retrait CDF avec paiement mixte
+
+| Ligne | Compte | Portefeuille | Devise | Débit | Crédit | Description |
+|-------|--------|--------------|--------|-------|--------|-------------|
+| 1 | Service | Virtuel | CDF | 250,000 | - | Débit total du service |
+| 2 | Cash | Cash | CDF | - | 150,000 | Sortie cash CDF |
+| 3 | Service | Virtuel | CDF | - | 100,000 | Conversion CDF→USD |
+| 4 | Service | Virtuel | USD | 100 | - | Conversion CDF→USD |
+| 5 | Cash | Cash | USD | - | 100 | Sortie cash USD |
+
+**Signification des lignes de conversion :**
+- **Ligne 3** : Le service récupère 100,000 CDF "virtuels" représentant la valeur CDF de 100 USD
+- **Ligne 4** : Ces 100,000 CDF sont convertis en 100 USD qui sortent du service
+- **Ligne 5** : Les 100 USD sont ajoutés au cash
+
+### 10.4 Impact sur les soldes
+
+Les fonctions mettent maintenant à jour **les deux soldes virtuels** :
+
+```sql
+UPDATE services
+SET
+  solde_virtuel_cdf = solde_virtuel_cdf - p_montant_total_cdf,
+  solde_virtuel_usd = solde_virtuel_usd - p_montant_paye_usd,  -- ← Nouveau
+  updated_at = now()
+WHERE id = p_service_id;
+```
+
+Cela permet de :
+- Suivre la position de change du service
+- Éviter les décalages entre CDF et USD
+- Faciliter l'audit des conversions
+
+### 10.5 Fichiers modifiés
+
+**Backend :**
+- Migration : `20260122100000_fix_transaction_balance_validation_by_currency.sql`
+  - Fonction `validate_transaction_balance` corrigée
+
+- Migration : `20260122101500_fix_transaction_mixte_cdf_add_conversion_lines.sql`
+  - Fonction `create_transaction_mixte_retrait_cdf` corrigée
+  - Fonction `create_transaction_mixte_depot_cdf` corrigée
+
+**Documentation :**
+- `CORRECTION_EQUILIBRE_TRANSACTIONS_MIXTES.md` : Documentation détaillée
+
+### 10.6 Tests de régression
+
+```sql
+-- Test 1 : Retrait CDF mixte (devrait passer)
+SELECT create_transaction_mixte_retrait_cdf(
+  p_service_id := 'uuid',
+  p_montant_total_cdf := 250000,
+  p_montant_paye_cdf := 150000,
+  p_montant_paye_usd := 100
+);
+
+-- Test 2 : Vérifier l'équilibre par devise
+SELECT
+  devise,
+  SUM(CASE WHEN sens = 'debit' THEN montant ELSE 0 END) AS debit,
+  SUM(CASE WHEN sens = 'credit' THEN montant ELSE 0 END) AS credit
+FROM transaction_lines
+WHERE header_id = 'uuid-transaction'
+GROUP BY devise;
+-- Résultat attendu : debit = credit pour chaque devise
+```
 
 ---
 
