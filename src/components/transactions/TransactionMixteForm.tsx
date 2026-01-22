@@ -327,7 +327,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         <label className="block text-sm font-medium text-slate-700 mb-2">
           Montant principal ({formData.devise_reference})
           <span className="text-xs text-slate-500 ml-2">
-            (montant {formData.type === 'retrait' ? 'débité du' : 'crédité au'} service virtuel)
+            ({formData.type === 'retrait' ? 'créance qui augmente' : 'créance qui diminue'})
           </span>
         </label>
         <input
@@ -346,7 +346,9 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
       <div className="border-t border-slate-200 pt-4">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold text-slate-700">Répartition du paiement</h4>
+          <h4 className="text-sm font-semibold text-slate-700">
+            {formData.type === 'retrait' ? 'Répartition du paiement au client' : 'Répartition de la réception du client'}
+          </h4>
           <label className="flex items-center space-x-2 text-sm">
             <input
               type="checkbox"
@@ -466,12 +468,15 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
               </div>
 
               <div className="pt-2 border-t border-emerald-200 flex justify-between items-center">
-                <span className="text-slate-700 font-semibold">Impact sur le service</span>
-                <span className="text-emerald-700 font-bold">
-                  {formData.type === 'retrait' ? '-' : '+'}{equivalent.montantPrincipal.toLocaleString('fr-FR', {
+                <span className="text-slate-700 font-semibold">Impact sur le service virtuel</span>
+                <span className={`font-bold ${formData.type === 'retrait' ? 'text-emerald-700' : 'text-amber-700'}`}>
+                  {formData.type === 'retrait' ? '+' : '-'}{equivalent.montantPrincipal.toLocaleString('fr-FR', {
                     minimumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0,
                     maximumFractionDigits: equivalent.devisePrincipale === 'USD' ? 2 : 0
                   })} {equivalent.devisePrincipale}
+                  <span className="text-xs font-normal text-slate-600 ml-2">
+                    ({formData.type === 'retrait' ? 'créance augmente' : 'créance diminue'})
+                  </span>
                 </span>
               </div>
             </div>
