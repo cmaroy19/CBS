@@ -112,7 +112,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
         if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
           throw new Error(
-            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux}, ` +
+            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux.toFixed(2)}, ` +
             `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
           );
         }
@@ -141,10 +141,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
         const montantUsdAttendu = resteCdf * exchangeRate.taux;
+        const tauxAffiche = 1 / exchangeRate.taux;
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux ${exchangeRate.taux}, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 USD = ${tauxAffiche.toFixed(2)} CDF, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
@@ -248,9 +249,22 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg">
           <div className="flex items-center space-x-2">
             <Calculator className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              Taux actif: 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
-            </span>
+            <div className="flex-1">
+              <span className="text-sm font-medium">
+                {exchangeRate.devise_source === 'CDF' && exchangeRate.devise_destination === 'USD' ? (
+                  <>
+                    Taux actif: 1 USD = {(1 / exchangeRate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
+                    <span className="block text-xs text-emerald-600 mt-0.5">
+                      (taux interne: 1 CDF = {exchangeRate.taux.toFixed(6)} USD)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Taux actif: 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
+                  </>
+                )}
+              </span>
+            </div>
           </div>
         </div>
       )}
