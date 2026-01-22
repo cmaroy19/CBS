@@ -16,6 +16,7 @@
 6. [Exemples pratiques](#6-exemples-pratiques)
 7. [Migration depuis l'ancien système](#7-migration-depuis-lancien-système)
 8. [Maintenance et dépannage](#8-maintenance-et-dépannage)
+9. [Correction du Calcul CDF→USD](#9-correction-du-calcul-cdfusd-22-janvier-2026)
 
 ---
 
@@ -590,6 +591,170 @@ FROM v_exchange_rates_summary;
 5. **Tester avant de déployer**
    - Créer des transactions de test
    - Vérifier les calculs dans les deux sens
+
+---
+
+## 9. Correction du Calcul CDF→USD (22 janvier 2026)
+
+### 9.1 Problème corrigé
+
+Une erreur de logique dans les fonctions de transaction mixte CDF causait l'utilisation du mauvais taux de change.
+
+#### Symptômes
+
+Lors de transactions avec CDF comme devise principale :
+- Message d'erreur : "Montant USD incorrect. Attendu: 108.70 USD pour 250000 CDF au taux 2300"
+- Alors que le taux actif affiché était : "1 USD = 2,500 CDF"
+- Impossibilité de créer des transactions avec taux de vente USD différent du taux d'achat
+
+#### Cause racine
+
+Les fonctions `create_transaction_mixte_retrait_cdf` et `create_transaction_mixte_depot_cdf` utilisaient :
+- **Taux incorrect** : `get_active_exchange_rate('USD', 'CDF')` (taux d'achat USD)
+- **Calcul incorrect** : Division au lieu de multiplication
+- **Validation incorrecte** : Comparaison avec le mauvais taux
+
+### 9.2 Solution implémentée
+
+#### Avant la correction ❌
+
+```sql
+-- Utilisait le taux USD→CDF (ex: 2200)
+v_taux_change := get_active_exchange_rate('USD', 'CDF');
+
+-- Calculait incorrectement
+v_montant_usd_equivalent := (p_montant_total_cdf - p_montant_paye_cdf) / v_taux_change;
+-- Exemple: 100,000 CDF / 2200 = 45.45 USD ❌
+```
+
+#### Après la correction ✅
+
+```sql
+-- Utilise le taux CDF→USD (ex: 0.0004)
+v_taux_change := get_active_exchange_rate('CDF', 'USD');
+
+-- Calcule le taux pour affichage
+v_taux_affichage := ROUND(1.0 / v_taux_change, 2);
+
+-- Calcule correctement
+v_montant_usd_equivalent := (p_montant_total_cdf - p_montant_paye_cdf) * v_taux_change;
+-- Exemple: 100,000 CDF × 0.0004 = 40 USD ✅
+```
+
+### 9.3 Impact de la correction
+
+#### Messages d'erreur améliorés
+
+Les messages affichent maintenant le taux de manière compréhensible :
+
+```sql
+RAISE EXCEPTION 'Montant USD incorrect. Attendu: % USD pour % CDF au taux 1 USD = % CDF (taux interne: 1 CDF = % USD)',
+  ROUND(v_montant_usd_equivalent, 2),  -- 40 USD
+  (p_montant_total_cdf - p_montant_paye_cdf),  -- 100,000 CDF
+  v_taux_affichage,  -- 2,500 CDF
+  v_taux_change;     -- 0.0004 USD
+```
+
+#### Interface utilisateur cohérente
+
+Le formulaire affiche le taux de la même manière que les messages d'erreur :
+
+```
+Taux actif: 1 USD = 2,500.00 CDF
+(taux interne: 1 CDF = 0.000400 USD)
+```
+
+### 9.4 Exemples de validation
+
+#### Exemple 1 : Transaction correcte
+
+**Configuration :**
+- Taux CDF→USD : 0.0004 (soit 1 USD = 2500 CDF)
+
+**Transaction :**
+- Total : 250,000 CDF
+- Paiement CDF : 150,000 CDF
+- Reste : 100,000 CDF
+
+**Calcul :**
+```
+Montant USD = 100,000 × 0.0004 = 40 USD ✅
+Validation : 150,000 + (40 ÷ 0.0004) = 150,000 + 100,000 = 250,000 ✅
+```
+
+#### Exemple 2 : Détection d'erreur
+
+**Transaction avec montant incorrect :**
+- Total : 250,000 CDF
+- Paiement CDF : 150,000 CDF
+- Paiement USD : **45 USD** (incorrect)
+
+**Erreur générée :**
+```
+Montant USD incorrect. Attendu: 40.00 USD pour 100000.00 CDF
+au taux 1 USD = 2,500.00 CDF (taux interne: 1 CDF = 0.000400 USD)
+```
+
+### 9.5 Tests de régression
+
+Pour vérifier que la correction fonctionne correctement :
+
+```sql
+-- Test 1 : Retrait CDF avec paiement mixte
+SELECT create_transaction_mixte_retrait_cdf(
+  p_service_id := 'uuid-service',
+  p_montant_total_cdf := 250000,
+  p_montant_paye_cdf := 150000,
+  p_montant_paye_usd := 40,
+  p_info_client := 'Test CDF→USD',
+  p_created_by := 'uuid-user'
+);
+-- Résultat attendu : Transaction créée avec succès ✅
+
+-- Test 2 : Dépôt CDF avec réception mixte
+SELECT create_transaction_mixte_depot_cdf(
+  p_service_id := 'uuid-service',
+  p_montant_total_cdf := 540000,
+  p_montant_recu_cdf := 340000,
+  p_montant_recu_usd := 80,
+  p_info_client := 'Test CDF→USD dépôt',
+  p_created_by := 'uuid-user'
+);
+-- Résultat attendu : Transaction créée avec succès ✅
+
+-- Test 3 : Validation de montant incorrect
+SELECT create_transaction_mixte_retrait_cdf(
+  p_service_id := 'uuid-service',
+  p_montant_total_cdf := 250000,
+  p_montant_paye_cdf := 150000,
+  p_montant_paye_usd := 45,  -- Incorrect (devrait être 40)
+  p_info_client := 'Test validation',
+  p_created_by := 'uuid-user'
+);
+-- Résultat attendu : Exception avec message clair ✅
+```
+
+### 9.6 Fichiers modifiés
+
+**Backend :**
+- Migration : `20260122090000_fix_transaction_mixte_cdf_use_correct_rate.sql`
+  - Fonction `create_transaction_mixte_retrait_cdf` corrigée
+  - Fonction `create_transaction_mixte_depot_cdf` corrigée
+
+**Frontend :**
+- Composant : `src/components/transactions/TransactionMixteForm.tsx`
+  - Affichage normalisé du taux CDF→USD
+  - Messages d'erreur cohérents avec la base de données
+
+**Documentation :**
+- `CORRECTION_TAUX_CDF_USD.md` : Documentation détaillée de la correction
+- `SYSTEME_TAUX_BIDIRECTIONNELS.md` : Cette section ajoutée
+
+### 9.7 Rétrocompatibilité
+
+- Les transactions existantes ne sont **pas affectées** (taux gelé dans `transaction_headers`)
+- Les calculs des transactions USD→CDF restent **inchangés**
+- Seules les nouvelles transactions CDF→USD utilisent la logique corrigée
 
 ---
 
