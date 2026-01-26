@@ -27,86 +27,34 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   const [error, setError] = useState('');
   const [autoCalculate, setAutoCalculate] = useState(true);
 
-  // Nouveaux states pour le choix du taux
-  const [exchangeRateMode, setExchangeRateMode] = useState<'AUTO' | 'MANUAL'>('AUTO');
-  const [availableRates, setAvailableRates] = useState<ExchangeRate[]>([]);
-  const [selectedRateId, setSelectedRateId] = useState<string>('');
-
   useEffect(() => {
     loadExchangeRate();
-  }, [formData.devise_reference, exchangeRateMode]);
+  }, [formData.devise_reference]);
 
   const loadExchangeRate = async () => {
     try {
       const deviseSource = formData.devise_reference;
       const deviseDestination = formData.devise_reference === 'USD' ? 'CDF' : 'USD';
 
-      if (exchangeRateMode === 'AUTO') {
-        // Mode automatique : charger le taux actif par défaut
-        const { data, error } = await supabase
-          .from('exchange_rates')
-          .select('*')
-          .eq('devise_source', deviseSource)
-          .eq('devise_destination', deviseDestination)
-          .eq('actif', true)
-          .maybeSingle();
+      const { data, error } = await supabase
+        .from('exchange_rates')
+        .select('*')
+        .eq('devise_source', deviseSource)
+        .eq('devise_destination', deviseDestination)
+        .eq('actif', true)
+        .maybeSingle();
 
-        if (error) throw error;
-        setExchangeRate(data);
+      if (error) throw error;
+      setExchangeRate(data);
 
-        if (!data) {
-          setError(`Aucun taux de change actif pour ${deviseSource} → ${deviseDestination}. Veuillez le configurer.`);
-        } else {
-          setError('');
-        }
+      if (!data) {
+        setError(`Aucun taux de change actif pour ${deviseSource} → ${deviseDestination}. Veuillez le configurer.`);
       } else {
-        // Mode manuel : charger tous les taux actifs
-        const { data, error } = await supabase
-          .from('exchange_rates')
-          .select('*')
-          .eq('devise_source', deviseSource)
-          .eq('devise_destination', deviseDestination)
-          .eq('actif', true)
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setAvailableRates(data || []);
-
-        if (!data || data.length === 0) {
-          setError(`Aucun taux de change actif pour ${deviseSource} → ${deviseDestination}. Veuillez le configurer.`);
-          setExchangeRate(null);
-        } else {
-          setError('');
-          // Si un taux est déjà sélectionné, le conserver
-          if (selectedRateId) {
-            const selectedRate = data.find(r => r.id === selectedRateId);
-            if (selectedRate) {
-              setExchangeRate(selectedRate);
-            } else {
-              // Taux sélectionné n'existe plus, réinitialiser
-              setSelectedRateId('');
-              setExchangeRate(null);
-            }
-          } else {
-            setExchangeRate(null);
-          }
-        }
+        setError('');
       }
     } catch (err: any) {
       console.error('Erreur chargement taux:', err);
-      setError('Impossible de charger les taux de change');
-    }
-  };
-
-  // Gestion du changement de taux manuel
-  const handleManualRateChange = (rateId: string) => {
-    setSelectedRateId(rateId);
-    const selectedRate = availableRates.find(r => r.id === rateId);
-    if (selectedRate) {
-      setExchangeRate(selectedRate);
-      setError('');
-    } else {
-      setExchangeRate(null);
+      setError('Impossible de charger le taux de change actif');
     }
   };
 
@@ -181,8 +129,6 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
           p_info_client: formData.info_client || null,
           p_notes: formData.notes || null,
           p_created_by: user?.id,
-          p_exchange_rate_mode: exchangeRateMode,
-          p_exchange_rate_id: exchangeRateMode === 'MANUAL' ? selectedRateId : null,
         } : {
           p_service_id: formData.service_id,
           p_montant_total_usd: formData.montant_total,
@@ -191,8 +137,6 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
           p_info_client: formData.info_client || null,
           p_notes: formData.notes || null,
           p_created_by: user?.id,
-          p_exchange_rate_mode: exchangeRateMode,
-          p_exchange_rate_id: exchangeRateMode === 'MANUAL' ? selectedRateId : null,
         };
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
@@ -218,8 +162,6 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
           p_info_client: formData.info_client || null,
           p_notes: formData.notes || null,
           p_created_by: user?.id,
-          p_exchange_rate_mode: exchangeRateMode,
-          p_exchange_rate_id: exchangeRateMode === 'MANUAL' ? selectedRateId : null,
         } : {
           p_service_id: formData.service_id,
           p_montant_total_cdf: formData.montant_total,
@@ -228,8 +170,6 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
           p_info_client: formData.info_client || null,
           p_notes: formData.notes || null,
           p_created_by: user?.id,
-          p_exchange_rate_mode: exchangeRateMode,
-          p_exchange_rate_id: exchangeRateMode === 'MANUAL' ? selectedRateId : null,
         };
       }
 
@@ -312,112 +252,29 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </div>
       )}
 
-      {/* Section Choix du Taux de Change */}
-      <div className="bg-slate-50 border border-slate-200 px-4 py-3 rounded-lg space-y-3">
-        <div className="flex items-center space-x-2">
-          <Calculator className="w-4 h-4 text-slate-600" />
-          <h4 className="text-sm font-semibold text-slate-700">Taux de change</h4>
-        </div>
-
-        {/* Radio Buttons */}
-        <div className="space-y-2">
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="radio"
-              name="exchangeRateMode"
-              value="AUTO"
-              checked={exchangeRateMode === 'AUTO'}
-              onChange={(e) => {
-                setExchangeRateMode(e.target.value as 'AUTO');
-                setSelectedRateId('');
-              }}
-              className="w-4 h-4 text-emerald-500 border-slate-300 focus:ring-emerald-500"
-            />
-            <span className="text-sm text-slate-700">Taux automatique</span>
-          </label>
-
-          <label className="flex items-center space-x-2 cursor-pointer">
-            <input
-              type="radio"
-              name="exchangeRateMode"
-              value="MANUAL"
-              checked={exchangeRateMode === 'MANUAL'}
-              onChange={(e) => setExchangeRateMode(e.target.value as 'MANUAL')}
-              className="w-4 h-4 text-emerald-500 border-slate-300 focus:ring-emerald-500"
-            />
-            <span className="text-sm text-slate-700">Choisir un taux actif</span>
-          </label>
-        </div>
-
-        {/* Affichage selon le mode */}
-        {exchangeRateMode === 'AUTO' && exchangeRate && (
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-lg">
-            <span className="text-sm font-medium">
-              {exchangeRate.devise_source === 'CDF' && exchangeRate.devise_destination === 'USD' ? (
-                <>
-                  Taux actif : 1 USD = {(1 / exchangeRate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
-                  <span className="block text-xs text-emerald-600 mt-0.5">
-                    (taux interne: 1 CDF = {exchangeRate.taux.toFixed(6)} USD)
-                  </span>
-                </>
-              ) : (
-                <>
-                  Taux actif : 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
-                </>
-              )}
-            </span>
+      {exchangeRate && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <Calculator className="w-4 h-4" />
+            <div className="flex-1">
+              <span className="text-sm font-medium">
+                {exchangeRate.devise_source === 'CDF' && exchangeRate.devise_destination === 'USD' ? (
+                  <>
+                    Taux actif: 1 USD = {(1 / exchangeRate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
+                    <span className="block text-xs text-emerald-600 mt-0.5">
+                      (taux interne: 1 CDF = {exchangeRate.taux.toFixed(6)} USD)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Taux actif: 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
+                  </>
+                )}
+              </span>
+            </div>
           </div>
-        )}
-
-        {exchangeRateMode === 'MANUAL' && (
-          <div>
-            <select
-              value={selectedRateId}
-              onChange={(e) => handleManualRateChange(e.target.value)}
-              className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-              required
-            >
-              <option value="">Sélectionner un taux</option>
-              {availableRates.map((rate) => {
-                const displayRate = rate.devise_source === 'CDF' && rate.devise_destination === 'USD'
-                  ? `1 USD = ${(1 / rate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF`
-                  : `1 ${rate.devise_source} = ${rate.taux.toLocaleString('fr-FR')} ${rate.devise_destination}`;
-
-                const dateFormatted = new Date(rate.created_at).toLocaleDateString('fr-FR', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  year: 'numeric'
-                });
-
-                return (
-                  <option key={rate.id} value={rate.id}>
-                    {displayRate} ({dateFormatted})
-                  </option>
-                );
-              })}
-            </select>
-
-            {selectedRateId && exchangeRate && (
-              <div className="mt-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-lg">
-                <span className="text-sm font-medium">
-                  {exchangeRate.devise_source === 'CDF' && exchangeRate.devise_destination === 'USD' ? (
-                    <>
-                      Taux sélectionné : 1 USD = {(1 / exchangeRate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
-                      <span className="block text-xs text-emerald-600 mt-0.5">
-                        (taux interne: 1 CDF = {exchangeRate.taux.toFixed(6)} USD)
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      Taux sélectionné : 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
-                    </>
-                  )}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -663,8 +520,8 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         </button>
         <button
           type="submit"
-          disabled={loading || !exchangeRate || (exchangeRateMode === 'MANUAL' && !selectedRateId)}
-          className="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={loading || !exchangeRate}
+          className="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
         >
           {loading ? 'Enregistrement...' : 'Créer la transaction'}
         </button>
