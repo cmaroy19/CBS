@@ -23,42 +23,18 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
     notes: '',
   });
   const [exchangeRate, setExchangeRate] = useState<ExchangeRate | null>(null);
-  const [exchangeRateContext, setExchangeRateContext] = useState<'BUY_USD' | 'SELL_USD'>('SELL_USD');
-  const [exchangeRateValue, setExchangeRateValue] = useState<number>(0);
-  const [exchangeRateLabel, setExchangeRateLabel] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [autoCalculate, setAutoCalculate] = useState(true);
 
   useEffect(() => {
-    determineExchangeRateContext();
-  }, [formData.montant_usd, formData.montant_cdf, formData.type]);
+    loadExchangeRate();
+  }, [formData.devise_reference]);
 
-  const determineExchangeRateContext = async () => {
+  const loadExchangeRate = async () => {
     try {
-      let deviseSource: string;
-      let deviseDestination: string;
-      let context: 'BUY_USD' | 'SELL_USD';
-      let label: string;
-
-      if (formData.montant_cdf > 0) {
-        deviseSource = 'USD';
-        deviseDestination = 'CDF';
-        context = 'SELL_USD';
-        label = 'Taux de VENTE USD';
-      } else if (formData.montant_usd > 0) {
-        deviseSource = 'CDF';
-        deviseDestination = 'USD';
-        context = 'BUY_USD';
-        label = 'Taux d\'ACHAT USD';
-      } else {
-        const defaultDeviseSource = formData.devise_reference;
-        const defaultDeviseDestination = formData.devise_reference === 'USD' ? 'CDF' : 'USD';
-        deviseSource = defaultDeviseSource;
-        deviseDestination = defaultDeviseDestination;
-        context = defaultDeviseSource === 'USD' ? 'SELL_USD' : 'BUY_USD';
-        label = defaultDeviseSource === 'USD' ? 'Taux de VENTE USD' : 'Taux d\'ACHAT USD';
-      }
+      const deviseSource = formData.devise_reference;
+      const deviseDestination = formData.devise_reference === 'USD' ? 'CDF' : 'USD';
 
       const { data, error } = await supabase
         .from('exchange_rates')
@@ -69,20 +45,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         .maybeSingle();
 
       if (error) throw error;
-
       setExchangeRate(data);
-      setExchangeRateContext(context);
-      setExchangeRateLabel(label);
-
-      if (data) {
-        if (deviseSource === 'USD' && deviseDestination === 'CDF') {
-          setExchangeRateValue(data.taux);
-        } else if (deviseSource === 'CDF' && deviseDestination === 'USD') {
-          setExchangeRateValue(1 / data.taux);
-        } else {
-          setExchangeRateValue(data.taux);
-        }
-      }
 
       if (!data) {
         setError(`Aucun taux de change actif pour ${deviseSource} → ${deviseDestination}. Veuillez le configurer.`);
@@ -96,22 +59,22 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   };
 
   useEffect(() => {
-    if (autoCalculate && exchangeRate && formData.montant_total > 0 && exchangeRateValue > 0) {
+    if (autoCalculate && exchangeRate && formData.montant_total > 0) {
       if (formData.devise_reference === 'USD' && formData.montant_usd >= 0) {
         const resteUsd = formData.montant_total - formData.montant_usd;
         if (resteUsd >= 0) {
-          const montantCdfCalcule = resteUsd * exchangeRateValue;
+          const montantCdfCalcule = resteUsd * exchangeRate.taux;
           setFormData(prev => ({ ...prev, montant_cdf: Math.round(montantCdfCalcule) }));
         }
       } else if (formData.devise_reference === 'CDF' && formData.montant_cdf >= 0) {
         const resteCdf = formData.montant_total - formData.montant_cdf;
         if (resteCdf >= 0) {
-          const montantUsdCalcule = resteCdf / exchangeRateValue;
+          const montantUsdCalcule = resteCdf * exchangeRate.taux;
           setFormData(prev => ({ ...prev, montant_usd: Math.round(montantUsdCalcule * 100) / 100 }));
         }
       }
     }
-  }, [formData.montant_total, formData.montant_usd, formData.montant_cdf, formData.devise_reference, exchangeRate, exchangeRateValue, autoCalculate]);
+  }, [formData.montant_total, formData.montant_usd, formData.montant_cdf, formData.devise_reference, exchangeRate, autoCalculate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,11 +108,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
 
       if (formData.devise_reference === 'USD') {
         const resteUsd = formData.montant_total - formData.montant_usd;
-        const montantCdfAttendu = resteUsd * exchangeRateValue;
+        const montantCdfAttendu = resteUsd * exchangeRate.taux;
 
         if (Math.abs(montantCdfAttendu - formData.montant_cdf) > 0.01) {
           throw new Error(
-            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRateValue.toFixed(2)}, ` +
+            `Montant CDF incorrect. Pour ${resteUsd.toFixed(2)} USD au taux ${exchangeRate.taux.toFixed(2)}, ` +
             `le montant attendu est ${montantCdfAttendu.toFixed(2)} CDF`
           );
         }
@@ -177,11 +140,12 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         };
       } else {
         const resteCdf = formData.montant_total - formData.montant_cdf;
-        const montantUsdAttendu = resteCdf / exchangeRateValue;
+        const montantUsdAttendu = resteCdf * exchangeRate.taux;
+        const tauxAffiche = 1 / exchangeRate.taux;
 
         if (Math.abs(montantUsdAttendu - formData.montant_usd) > 0.01) {
           throw new Error(
-            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 USD = ${exchangeRateValue.toFixed(2)} CDF, ` +
+            `Montant USD incorrect. Pour ${resteCdf.toFixed(2)} CDF au taux 1 USD = ${tauxAffiche.toFixed(2)} CDF, ` +
             `le montant attendu est ${montantUsdAttendu.toFixed(2)} USD`
           );
         }
@@ -224,9 +188,7 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
           montant_total: formData.montant_total,
           montant_usd: formData.montant_usd,
           montant_cdf: formData.montant_cdf,
-          taux: exchangeRateValue,
-          taux_contexte: exchangeRateContext,
-          taux_label: exchangeRateLabel,
+          taux: exchangeRate.taux,
         },
         user_id: user?.id,
       });
@@ -240,11 +202,11 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
   };
 
   const calculerEquivalent = () => {
-    if (!exchangeRate || formData.montant_total <= 0 || exchangeRateValue <= 0) return null;
+    if (!exchangeRate || formData.montant_total <= 0) return null;
 
     if (formData.devise_reference === 'USD') {
       const resteUsd = formData.montant_total - formData.montant_usd;
-      const montantCdfCalcule = resteUsd * exchangeRateValue;
+      const montantCdfCalcule = resteUsd * exchangeRate.taux;
 
       return {
         montantPrincipal: formData.montant_total,
@@ -253,13 +215,13 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         devise1: 'USD',
         montantPaye2: Math.round(montantCdfCalcule),
         devise2: 'CDF',
-        tauxAffichage: exchangeRateValue.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        reste: resteUsd,
-        tauxLabel: exchangeRateLabel
+        tauxAffichage: exchangeRate.taux.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        reste: resteUsd
       };
     } else {
       const resteCdf = formData.montant_total - formData.montant_cdf;
-      const montantUsdCalcule = resteCdf / exchangeRateValue;
+      const montantUsdCalcule = resteCdf * exchangeRate.taux;
+      const tauxAffiche = 1 / exchangeRate.taux;
 
       return {
         montantPrincipal: formData.montant_total,
@@ -268,9 +230,8 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
         devise1: 'CDF',
         montantPaye2: Math.round(montantUsdCalcule * 100) / 100,
         devise2: 'USD',
-        tauxAffichage: exchangeRateValue.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
-        reste: resteCdf,
-        tauxLabel: exchangeRateLabel
+        tauxAffichage: tauxAffiche.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        reste: resteCdf
       };
     }
   };
@@ -292,43 +253,24 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
       )}
 
       {exchangeRate && (
-        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-lg p-4">
-          <div className="flex items-start space-x-3">
-            <Calculator className="w-5 h-5 text-emerald-600 mt-0.5 flex-shrink-0" />
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg">
+          <div className="flex items-center space-x-2">
+            <Calculator className="w-4 h-4" />
             <div className="flex-1">
-              <h3 className="text-sm font-bold text-emerald-800 mb-2">
-                Taux de change appliqué
-              </h3>
-              <div className="bg-white/70 rounded-md p-3 border border-emerald-200">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
-                    {exchangeRateLabel}
-                  </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                    exchangeRateContext === 'SELL_USD'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {exchangeRateContext === 'SELL_USD' ? 'Vente USD' : 'Achat USD'}
-                  </span>
-                </div>
-                <div className="text-lg font-bold text-slate-900 flex items-baseline space-x-1">
-                  <span>1 USD =</span>
-                  <span className="text-emerald-600">
-                    {exchangeRateValue.toLocaleString('fr-FR', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2
-                    })}
-                  </span>
-                  <span>CDF</span>
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  {exchangeRateContext === 'SELL_USD'
-                    ? 'La caisse donne des CDF au client'
-                    : 'La caisse donne des USD au client'
-                  }
-                </div>
-              </div>
+              <span className="text-sm font-medium">
+                {exchangeRate.devise_source === 'CDF' && exchangeRate.devise_destination === 'USD' ? (
+                  <>
+                    Taux actif: 1 USD = {(1 / exchangeRate.taux).toLocaleString('fr-FR', { minimumFractionDigits: 2 })} CDF
+                    <span className="block text-xs text-emerald-600 mt-0.5">
+                      (taux interne: 1 CDF = {exchangeRate.taux.toFixed(6)} USD)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    Taux actif: 1 {exchangeRate.devise_source} = {exchangeRate.taux.toLocaleString('fr-FR')} {exchangeRate.devise_destination}
+                  </>
+                )}
+              </span>
             </div>
           </div>
         </div>
@@ -466,14 +408,9 @@ export function TransactionMixteForm({ services, onSuccess, onCancel }: Transact
               <span className="text-slate-700 font-semibold">
                 {formData.type === 'retrait' ? 'Détail du paiement' : 'Détail de la réception'}
               </span>
-              <div className="flex flex-col items-end space-y-0.5">
-                <span className="text-emerald-700 text-xs font-bold">
-                  {equivalent.tauxLabel}
-                </span>
-                <span className="text-slate-600 text-xs">
-                  1 USD = {equivalent.tauxAffichage} CDF
-                </span>
-              </div>
+              <span className="text-emerald-700 text-xs font-medium">
+                Taux: 1 {formData.devise_reference === 'USD' ? 'USD' : 'USD'} = {equivalent.tauxAffichage} {formData.devise_reference === 'USD' ? 'CDF' : 'CDF'}
+              </span>
             </div>
 
             <div className="space-y-2">
